@@ -25,7 +25,7 @@ juce_add_plugin(Afterglow
     BUNDLE_ID "audio.creation.afterglow"
     PLUGIN_MANUFACTURER_CODE CrAu
     PLUGIN_CODE Afgw
-    FORMATS VST3
+    FORMATS VST3 Standalone
     PRODUCT_NAME "Afterglow"
     DESCRIPTION "Afterglow VST3 development starter"
     IS_SYNTH FALSE

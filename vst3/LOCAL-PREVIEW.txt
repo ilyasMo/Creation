@@ -1,0 +1,20 @@
+AFTERGLOW — LOCAL PREVIEW IN VISUAL STUDIO
+
+The Standalone target opens the native editor without Ableton.
+It uses the same processor as the VST3. It still needs compilation.
+
+1. In Visual Studio, choose Git > Pull on afterglow-vst3-starter.
+2. Allow CMake configuration to finish.
+3. In Select Startup Item, choose Afterglow.exe / Afterglow_Standalone.
+4. Press F5. The first Debug build compiles JUCE and can take several minutes.
+5. Later edits normally rebuild only changed sources, making local iteration faster.
+6. Close the app before rebuilding. Changes do not appear in an already-running binary.
+
+The preview currently has a basic native parameter editor. Custom Afterglow artwork comes later.
+For sound testing, the standalone wrapper offers audio-device settings and device input.
+Use headphones before enabling input monitoring. It is not a DAW and does not supply host tempo;
+Sync uses the last known tempo or 120 BPM. Use Ableton for final host-sync/automation validation.
+The VST3 continues to receive audio and tempo from the DAW normally.
+
+GitHub Actions also supplies a compiled Afterglow-Windows-Preview artifact for opening without building.
+The browser prototype remains useful for instant visual design; it is not the native C++ engine.
