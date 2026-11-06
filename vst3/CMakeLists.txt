@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Afterglow VERSION 0.3.0 LANGUAGES C CXX)
+project(Afterglow VERSION 0.4.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(AFTERGLOW_CORE_TESTS_ONLY "Build the portable processing tests without JUCE" OFF)
@@ -22,6 +22,7 @@ FetchContent_Declare(JUCE
     URL_HASH SHA256=0eafd736286c6e7bb6958d79fce18d42cb654b8e231890d327b7cece379bd156
 )
 FetchContent_MakeAvailable(JUCE)
+juce_add_binary_data(AfterglowArtwork SOURCES Assets/Faceplate.png Assets/Caveat.ttf)
 juce_add_plugin(Afterglow
     COMPANY_NAME "Creation Audio"
     BUNDLE_ID "audio.creation.afterglow"
@@ -42,5 +43,14 @@ target_sources(Afterglow PRIVATE Source/PluginProcessor.cpp Source/PluginProcess
 target_compile_definitions(Afterglow PUBLIC
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0
 )
-target_link_libraries(Afterglow PRIVATE juce::juce_audio_utils
+target_link_libraries(Afterglow PRIVATE juce::juce_audio_utils AfterglowArtwork
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+option(AFTERGLOW_EDITOR_CHECKS "Build native editor integration checks and screenshots" OFF)
+if(AFTERGLOW_EDITOR_CHECKS)
+    juce_add_console_app(AfterglowEditorChecks PRODUCT_NAME "AfterglowEditorChecks")
+    target_sources(AfterglowEditorChecks PRIVATE tests/EditorChecks.cpp)
+    target_include_directories(AfterglowEditorChecks PRIVATE Source $<TARGET_PROPERTY:Afterglow,INCLUDE_DIRECTORIES>)
+    target_compile_definitions(AfterglowEditorChecks PRIVATE $<TARGET_PROPERTY:Afterglow,COMPILE_DEFINITIONS>)
+    target_link_libraries(AfterglowEditorChecks PRIVATE Afterglow)
+endif()

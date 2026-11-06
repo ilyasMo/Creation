@@ -16,8 +16,7 @@ against the complete processed path including EQ. All processing starts OFF, Mas
 
 A native custom editor replaces the generic editor. All continuous numeric readouts open for text editing
 on double-click; Enter commits, Escape cancels. Values clamp/snap to parameter ranges and notify host
-automation with change gestures. Hz entries accept k/kHz; decimal comma is supported. Sync mode disables
-the unused free-time control. Parameter attachments keep controls synchronized with host automation.
+automation with change gestures. Hz entries accept k/kHz; decimal comma is supported. Sync mode changes the Time fader to note divisions; clicking its readout opens note/style options. Parameter attachments keep controls synchronized with host automation.
 
 Existing parameter IDs for output gain, delay on/sync/time/feedback/ping-pong, note division/style and
 Master Mix remain stable. Feedback Tone/Wear parameter IDs are removed as requested; their old automation
@@ -29,3 +28,11 @@ and midpoint, wow/flutter audibility in generated signals, stereo ping-pong, 44.
 modulation/automation stress, modulation buffer boundaries, filter corners, and numeric entry parsing.
 Compilation and parameter/text integration still need Windows/native checks; listening, mouse interaction,
 DAW sync and saved-state acceptance should be confirmed in Live 11.
+
+
+0.4.0 adds the approved paper-and-ink faceplate with vector-drawn faders, shared EQ handles and
+embedded Caveat handwriting. Click the DELAY or EQ heading to switch it on/off; the underline and
+small ON/OFF status show its state, without the removed checkboxes. Wow/Flutter still modulate
+the delay engine. The top-right asterisk opens Output gain and Ping-pong. Fader wheels are
+disabled to avoid accidental host scrolling changes. The native editor resizes with a fixed aspect
+ratio. No audio parameters, saved-state IDs or processing algorithms change in this visual release.
