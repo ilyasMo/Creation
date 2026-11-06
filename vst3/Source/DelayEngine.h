@@ -9,9 +9,9 @@ namespace afterglow
 {
 struct DelaySettings
 {
-    bool enabled = false, sync = false;
-    float timeMs = 320.0f, feedback = 0.35f, toneHz = 4000.0f;
-    float drive = 0.25f, pingPong = 0.0f, mix = 1.0f;
+    bool enabled = false, sync = false, eqEnabled = false;
+    float timeMs = 320.0f, feedback = 0.35f, lowCutHz = 20.0f, highCutHz = 20000.0f;
+    float wow = 0.0f, flutter = 0.0f, pingPong = 0.0f, mix = 1.0f;
     int division = 3, timing = 0;
     double bpm = 120.0;
 };
@@ -33,23 +33,25 @@ public:
     void prepare(double sampleRate, const DelaySettings& settings)
     {
         rate = std::isfinite(sampleRate) && sampleRate > 0.0 ? sampleRate : 48000.0;
-        const auto size = static_cast<size_t>(std::ceil(rate * 24.0)) + 8;
+        const auto size = static_cast<size_t>(std::ceil(rate * 24.02)) + 8;
         for (auto& channel : ring) channel.assign(size, 0.0f);
         write = 0;
-        for (auto& filter : toneFilters) filter.reset();
-        for (auto& saturator : saturators) saturator.reset();
-        previousInput.fill(0); highState.fill(0);
+        for (auto& filter : lowCutFilters) filter.reset();
+        for (auto& filter : highCutFilters) filter.reset();
+        phases.fill(0.0);
         delayA = delayB = requested = delaySeconds(settings) * rate;
         fadeLength = std::max(1, static_cast<int>(rate * 0.040));
         fadePosition = fadeLength;
         smoothing = static_cast<float>(1.0 - std::exp(-1.0 / (rate * 0.020)));
-        highCoefficient = static_cast<float>(std::exp(-2.0 * pi * 30.0 / rate));
         active = settings.enabled ? 1.0f : 0.0f;
+        eqActive = settings.eqEnabled ? 1.0f : 0.0f;
         feedback = safe(settings.feedback, 0.0f, 0.95f);
         mix = safe(settings.mix, 0.0f, 1.0f);
-        drive = safe(settings.drive, 0.0f, 1.0f) * 4.0f;
+        wow = safe(settings.wow, 0.0f, 1.0f);
+        flutter = safe(settings.flutter, 0.0f, 1.0f);
         pingPong = safe(settings.pingPong, 0.0f, 1.0f);
-        toneConductance = toneCoefficient(settings.toneHz);
+        lowCutG = filterCoefficient(settings.lowCutHz);
+        highCutG = filterCoefficient(settings.highCutHz);
     }
 
     void process(float* const* channels, int channelCount, int samples,
@@ -58,16 +60,21 @@ public:
         if (ring[0].empty() || channelCount < 1 || samples < 1) return;
         requested = delaySeconds(settings) * rate;
         const float targetActive = settings.enabled ? 1.0f : 0.0f;
+        const float targetEq = settings.eqEnabled ? 1.0f : 0.0f;
         const float targetFeedback = safe(settings.feedback, 0.0f, 0.95f);
         const float targetMix = safe(settings.mix, 0.0f, 1.0f);
-        const float targetDrive = safe(settings.drive, 0.0f, 1.0f) * 4.0f;
+        const float targetWow = safe(settings.wow, 0.0f, 1.0f);
+        const float targetFlutter = safe(settings.flutter, 0.0f, 1.0f);
         const float targetPingPong = safe(settings.pingPong, 0.0f, 1.0f);
-        const float targetLow = toneCoefficient(settings.toneHz);
+        const float targetLowCut = filterCoefficient(settings.lowCutHz);
+        const float targetHighCut = filterCoefficient(settings.highCutHz);
         for (int i = 0; i < samples; ++i)
         {
-            approach(active, targetActive); approach(feedback, targetFeedback);
-            approach(mix, targetMix); approach(drive, targetDrive);
-            approach(pingPong, targetPingPong); approach(toneConductance, targetLow);
+            approach(active, targetActive); approach(eqActive, targetEq); approach(feedback, targetFeedback);
+            approach(mix, targetMix); approach(wow, targetWow); approach(flutter, targetFlutter);
+            approach(pingPong, targetPingPong);
+            approach(lowCutG, targetLowCut); approach(highCutG, targetHighCut);
+            const double modulation = tapeModulation();
             if (active * mix < 1.0e-6f)
             {
                 delayA = delayB = requested;
@@ -82,14 +89,10 @@ public:
             std::array<float, 2> tap {}, loop {};
             for (size_t ch = 0; ch < 2; ++ch)
             {
-                const float first = read(ch, delayA);
+                const float first = read(ch, delayA + modulation);
                 tap[ch] = fadePosition == fadeLength ? first
-                    : first + (read(ch, delayB) - first) * blend;
-                const float hp = highCoefficient * (highState[ch] + tap[ch] - previousInput[ch]);
-                previousInput[ch] = tap[ch]; highState[ch] = hp;
-                const float filtered = toneFilters[ch].process(hp, toneConductance);
-                const float coloured = saturators[ch].process(filtered, drive);
-                loop[ch] = coloured * feedback;
+                    : first + (read(ch, delayB + modulation) - first) * blend;
+                loop[ch] = tap[ch] * feedback;
             }
             const float left = channels[0][i];
             const float right = channelCount > 1 ? channels[1][i] : left;
@@ -97,8 +100,16 @@ public:
             const float sendLeft = left * (1.0f - p) + (left + right) * 0.5f * p;
             ring[0][write] = sendLeft * active + loop[0] * (1.0f - p) + loop[1] * p;
             ring[1][write] = right * active * (1.0f - p) + loop[1] * (1.0f - p) + loop[0] * p;
-            channels[0][i] = left + tap[0] * 0.5f * active * mix;
-            if (channelCount > 1) channels[1][i] = right + tap[1] * 0.5f * active * mix;
+            for (int channel = 0; channel < std::min(channelCount, 2); ++channel)
+            {
+                const auto ch = static_cast<size_t>(channel);
+                const float original = channel == 0 ? left : right;
+                const float processed = original + tap[ch] * 0.5f * active;
+                const float highPassed = lowCutFilters[ch].process(processed, lowCutG, true);
+                const float filtered = highCutFilters[ch].process(highPassed, highCutG);
+                const float wholeChain = processed + (filtered - processed) * eqActive;
+                channels[channel][i] = original + (wholeChain - original) * mix;
+            }
             write = (write + 1) % ring[0].size();
             if (fadePosition < fadeLength && ++fadePosition == fadeLength) delayA = delayB;
         }
@@ -115,12 +126,28 @@ private:
         value += smoothing * (target - value);
         if (std::abs(value - target) < 1.0e-7f) value = target;
     }
-    float toneCoefficient(float frequency) const noexcept
+    float filterCoefficient(float frequency) const noexcept
     {
-        return FeedbackLowPass::conductance(rate, safe(frequency, 500, 14000));
+        return FeedbackFilter::conductance(rate, safe(frequency, 20, 20000));
+    }
+    double tapeModulation() noexcept
+    {
+        double modulation = 0.0;
+        if (wow > 1.0e-7f)
+            modulation += wow * 0.003 * (0.85 * std::sin(phases[0]) + 0.15 * std::sin(phases[1]));
+        if (flutter > 1.0e-7f)
+            modulation += flutter * 0.0003 * (0.75 * std::sin(phases[2]) + 0.25 * std::sin(phases[3]));
+        constexpr std::array<double, 4> speeds { 0.45, 0.17, 7.5, 11.31 };
+        for (size_t i = 0; i < phases.size(); ++i)
+        {
+            phases[i] += 2.0 * pi * speeds[i] / rate;
+            if (phases[i] >= 2.0 * pi) phases[i] -= 2.0 * pi;
+        }
+        return modulation * rate;
     }
     float read(size_t ch, double delay) const noexcept
     {
+        delay = std::clamp(delay, 3.0, static_cast<double>(ring[ch].size()) - 4.0);
         double position = static_cast<double>(write) - delay;
         if (position < 0.0) position += static_cast<double>(ring[ch].size());
         const auto index = static_cast<size_t>(position);
@@ -132,13 +159,12 @@ private:
                          + x * (3.0f * (b - c) + d - a)));
     }
     std::array<std::vector<float>, 2> ring;
-    std::array<float, 2> previousInput {}, highState {};
-    std::array<FeedbackLowPass, 2> toneFilters;
-    std::array<FeedbackSaturator, 2> saturators;
+    std::array<FeedbackFilter, 2> lowCutFilters, highCutFilters;
+    std::array<double, 4> phases {};
     size_t write = 0;
     double rate = 48000.0, delayA = 15360, delayB = 15360, requested = 15360;
-    float smoothing = 0.001f, highCoefficient = 0.99f, toneConductance = 0.5f;
-    float active = 0, feedback = 0, mix = 1, drive = 0, pingPong = 0;
+    float smoothing = 0.001f, lowCutG = 0.001f, highCutG = 1.0f;
+    float active = 0, eqActive = 0, feedback = 0, mix = 1, wow = 0, flutter = 0, pingPong = 0;
     int fadeLength = 1920, fadePosition = 1920;
 };
 }

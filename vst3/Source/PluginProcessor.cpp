@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 
 namespace
 {
@@ -24,8 +25,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameters()
     layout.add(std::make_unique<juce::AudioParameterChoice>(ID { "delayTiming", 1 }, "Note style",
         juce::StringArray { "Straight", "Dotted", "Triplet" }, 0));
     number("delayFeedback", "Feedback", 0, 95, 0.1f, 35, "%");
-    number("delayToneHz", "Feedback tone", 500, 14000, 1, 4000, "Hz", 0.4f);
-    number("delayDrive", "Feedback wear", 0, 100, 0.1f, 25, "%");
+    number("delayWow", "Wow", 0, 100, 0.1f, 0, "%");
+    number("delayFlutter", "Flutter", 0, 100, 0.1f, 0, "%");
+    layout.add(std::make_unique<juce::AudioParameterBool>(ID { "eqEnabled", 1 }, "EQ ON", false));
+    number("eqLowCutHz", "Low cut / high-pass", 20, 20000, 1, 20, "Hz", 0.3f);
+    number("eqHighCutHz", "High cut / low-pass", 20, 20000, 1, 20000, "Hz", 0.3f);
     number("delayPingPong", "Ping-pong", 0, 100, 0.1f, 0, "%");
     number("masterMix", "Master Mix", 0, 100, 0.1f, 100, "%");
     return layout;
@@ -44,8 +48,11 @@ AfterglowProcessor::AfterglowProcessor()
     p.sync = parameters.getRawParameterValue("delaySync");
     p.time = parameters.getRawParameterValue("delayTimeMs");
     p.feedback = parameters.getRawParameterValue("delayFeedback");
-    p.tone = parameters.getRawParameterValue("delayToneHz");
-    p.drive = parameters.getRawParameterValue("delayDrive");
+    p.eqEnabled = parameters.getRawParameterValue("eqEnabled");
+    p.lowCut = parameters.getRawParameterValue("eqLowCutHz");
+    p.highCut = parameters.getRawParameterValue("eqHighCutHz");
+    p.wow = parameters.getRawParameterValue("delayWow");
+    p.flutter = parameters.getRawParameterValue("delayFlutter");
     p.pingPong = parameters.getRawParameterValue("delayPingPong");
     p.mix = parameters.getRawParameterValue("masterMix");
     p.division = parameters.getRawParameterValue("delayDivision");
@@ -57,9 +64,10 @@ afterglow::DelaySettings AfterglowProcessor::readDelaySettings() const noexcept
     const auto& p = delayParameters;
     afterglow::DelaySettings s;
     s.enabled = p.enabled->load() >= 0.5f;
-    s.sync = p.sync->load() >= 0.5f;
+    s.sync = p.sync->load() >= 0.5f; s.eqEnabled = p.eqEnabled->load() >= 0.5f;
     s.timeMs = p.time->load(); s.feedback = p.feedback->load() / 100.0f;
-    s.toneHz = p.tone->load(); s.drive = p.drive->load() / 100.0f;
+    s.lowCutHz = p.lowCut->load(); s.highCutHz = p.highCut->load();
+    s.wow = p.wow->load() / 100.0f; s.flutter = p.flutter->load() / 100.0f;
     s.pingPong = p.pingPong->load() / 100.0f; s.mix = p.mix->load() / 100.0f;
     s.division = juce::roundToInt(p.division->load());
     s.timing = juce::roundToInt(p.timing->load()); s.bpm = hostTempo.load();
@@ -78,10 +86,10 @@ void AfterglowProcessor::updateTempo()
 double AfterglowProcessor::getTailLengthSeconds() const
 {
     const auto s = readDelaySettings();
-    if (!s.enabled) return 0.04;
+    if (!s.enabled) return 0.25;
     const double feedback = std::clamp(static_cast<double>(s.feedback), 0.0, 0.95);
     const double repeats = feedback > 0.001 ? std::ceil(std::log(0.001) / std::log(feedback)) : 0.0;
-    return afterglow::delaySeconds(s) * (repeats + 1.0) + 0.04;
+    return afterglow::delaySeconds(s) * (repeats + 1.0) + 0.25;
 }
 
 bool AfterglowProcessor::isBusesLayoutSupported(const BusesLayout& layout) const
@@ -124,7 +132,7 @@ void AfterglowProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, 
     juce::ScopedNoDenormals noDenormals;
     updateTempo();
     auto settings = readDelaySettings();
-    settings.enabled = false; settings.mix = 0;
+    settings.enabled = false; settings.eqEnabled = false; settings.mix = 0;
     delayEngine.process(buffer.getArrayOfWritePointers(), getTotalNumInputChannels(),
                         buffer.getNumSamples(), settings);
     applyGain(buffer, 1.0f);
@@ -132,7 +140,7 @@ void AfterglowProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, 
 
 juce::AudioProcessorEditor* AfterglowProcessor::createEditor()
 {
-    return new juce::GenericAudioProcessorEditor(*this);
+    return new AfterglowEditor(*this);
 }
 
 void AfterglowProcessor::getStateInformation(juce::MemoryBlock& data)
@@ -147,6 +155,12 @@ void AfterglowProcessor::setStateInformation(const void* data, int sizeInBytes)
         if (xml->hasTagName(parameters.state.getType().toString()))
         {
             auto restored = juce::ValueTree::fromXml(*xml);
+            // New EQ defaults are neutral/off. Removed feedback Tone/Wear are not restored.
+            for (const char* id : { "delayToneHz", "delayDrive" })
+            {
+                const auto legacy = restored.getChildWithProperty("id", id);
+                if (legacy.isValid()) restored.removeChild(legacy, nullptr);
+            }
             // Earlier gain-only sessions have no delay parameters. Add their defaults.
             for (auto* parameter : getParameters())
                 if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter))

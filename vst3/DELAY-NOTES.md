@@ -1,36 +1,31 @@
-# Native delay checkpoint
+# Native delay 0.3.0
 
-This is the first native effect, independently developed from the browser delay. Movement, Reverb,
-Texture, finishing EQ, and custom interface remain future native work. The agreed final routing stays
-Texture → Movement → Delay → Reverb → EQ, with Master Mix around the complete processed path.
+Focus remains the native VST3 running in Ableton Live 11. This release replaces the Feedback Tone and
+Feedback Wear controls with Wow, Flutter and independent Low Cut / High Cut sliders. Removed Wear
+saturation is no longer in the feedback loop. Other effect modules are not implemented in C++ yet.
 
-Two stereo ring buffers use four-point interpolation. Delay-time changes crossfade read taps over 40 ms;
-rapid updates retain the latest requested target. Controls smooth over about 20 ms. The feedback path
-contains a 30 Hz high-pass, a TPT Butterworth low-pass and an antiderivative-antialiased soft saturator, so later repeats
-lose high frequencies and can acquire saturation. Ping-pong blends independent and cross-channel feedback.
-Mono hosts keep a mono delay. The original input is retained with a fixed internal echo return; there is
-no user-facing effect gain control. This is insert-style processing, not a wet-only send effect.
+Wow is a blend of slow 0.45/0.17 Hz delay modulation, up to 3 ms depth; Flutter uses 7.5/11.31 Hz components,
+up to 0.3 ms. Amount changes are smoothed and stereo modulation is linked. Nominal delay time remains
+host-synced, but enabled wow/flutter intentionally vary the instantaneous read time. Modulated reads are
+bounded with extra ring-buffer margin, including at extreme synced times.
 
-Tempo comes from the host, falling back to the last known value or 120 BPM. Synced notes span whole
-through 64th notes with straight, dotted and triplet styles. The maximum buffer is 24 seconds.
+EQ is AFTER the delay stage, shaping the entire processed signal including core audio and the first echo.
+It has an independent EQ ON switch. Low Cut (high-pass) and High Cut (low-pass) each sweep 20 Hz–20 kHz,
+using smoothed Butterworth TPT filters. Cutoffs can cross. Master Mix crossfades the untouched original
+against the complete processed path including EQ. All processing starts OFF, Master Mix at 100%, gain 0 dB.
 
-All processing is OFF on a new instance; Master Mix is 100%, output gain 0 dB. Existing outputGain
-parameter ID is preserved. Missing parameters in older gain-only sessions are restored to defaults.
+A native custom editor replaces the generic editor. All continuous numeric readouts open for text editing
+on double-click; Enter commits, Escape cancels. Values clamp/snap to parameter ranges and notify host
+automation with change gestures. Hz entries accept k/kHz; decimal comma is supported. Sync mode disables
+the unused free-time control. Parameter attachments keep controls synchronized with host automation.
 
-Portable tests cover mono/stereo passthrough, zero Mix, 44.1/48/96/192 kHz, impulse timing, note calculations,
-feedback darkening, ping-pong and high-feedback retiming stress. They do not prove subjective sound quality,
-real host tempo/automation accuracy, alias-free saturation, or perfect loudness matching. Live 11 listening,
-sync, automation and saved-state checks are the next user-side validation.
+Existing parameter IDs for output gain, delay on/sync/time/feedback/ping-pong, note division/style and
+Master Mix remain stable. Feedback Tone/Wear parameter IDs are removed as requested; their old automation
+will no longer apply. Older sessions use the new neutral EQ-off defaults rather than reinterpreting a
+feedback filter as a whole-signal EQ. Old gain and remaining settings still restore by their existing IDs.
 
-## Refinement 0.2.1
-
-The feedback tone cutoff now uses a topology-preserving Butterworth low-pass with approximately -3 dB
-at the displayed frequency across tested sample rates. The low cut is lowered from 50 to 30 Hz to retain
-more low body across repeats. The saturator uses first-order antiderivative antialiasing; its linear limit
-is a two-sample average inside the feedback loop. No new processing is added to the original or first echo.
-An isolated 10 kHz synthetic test measured about 9 dB less selected foldback energy relative to the
-fundamental than the previous direct tanh shaper. This is not an alias-free guarantee or a listening result.
-
-Synced notes may go below the Free mode's 20 ms lower bound (down to 1 ms), so 1/64 at 240 BPM correctly
-produces 15.625 ms. Existing parameter IDs and saved settings are unchanged. Test the new colour with
-Feedback around 45%, Tone 2500 Hz, Wear 50%, and synced dotted eighths on a short vocal or instrument phrase.
+Tests cover note timing, mono/stereo unity, whole-path EQ and first-echo response, global dry/wet endpoints
+and midpoint, wow/flutter audibility in generated signals, stereo ping-pong, 44.1/48/96/192 kHz, high-feedback
+modulation/automation stress, modulation buffer boundaries, filter corners, and numeric entry parsing.
+Compilation and parameter/text integration still need Windows/native checks; listening, mouse interaction,
+DAW sync and saved-state acceptance should be confirmed in Live 11.

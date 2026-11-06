@@ -1,27 +1,20 @@
-AFTERGLOW — NATIVE DELAY TEST BUILD
+AFTERGLOW 0.3.0 — NATIVE DELAY TEST
 
 1. Close Ableton before replacing the plugin.
-2. Extract the artifact ZIP from GitHub Actions.
-3. Replace the ENTIRE Afterglow.vst3 folder in:
-   C:\Program Files\Common Files\VST3
-4. Reopen Live 11. In Preferences > Plug-Ins, enable VST3 system folders and Rescan.
-5. Load Afterglow on an audio track. Set Output gain to 0 dB and start with low listening volume.
+2. Extract Afterglow-Windows-VST3 from the successful GitHub Actions run.
+3. Replace the entire Afterglow.vst3 folder in C:\Program Files\Common Files\VST3.
+4. Open Live 11, Preferences > Plug-Ins > Rescan, then load Afterglow.
 
-FIRST LISTEN:
-- Delay ON: enabled. Master Mix: 100%.
-- Sync to host: enabled. Synced note: 1/8. Note style: Dotted.
-- Feedback: 35%. Feedback tone: 4000 Hz. Feedback wear: 25%.
-- At 120 BPM, echoes should be spaced 375 ms apart. Change Ableton's tempo and confirm they follow.
-- Lower Feedback tone to make successive repeats darker. Increase wear for feedback saturation.
-- Ping-pong moves repeats across stereo channels. Mono tracks retain a mono delay.
-- In Free mode, Free delay time sets milliseconds; it is unused while Sync is enabled.
-- The core signal stays present. Master Mix blends the complete insert processing with the original.
-- All new processing starts OFF, with Mix at 100%. Gain-only saved projects retain their gain setting.
+STARTUP: Delay OFF, EQ OFF, Wow/Flutter 0%, Master Mix 100%, Output gain 0 dB.
 
-Sound-shaping parameters are exposed for host automation and project recall.
-This is a basic native editor for sound testing; the artwork and remaining browser modules are not ported yet.
-Buffer preparation allocates memory outside processing; control changes are smoothed and delay taps crossfade.
-The delay buffer holds up to 24 seconds. Extremely slow synced divisions clamp to this maximum.
-Feedback wear now uses antiderivative antialiasing; dedicated oversampling/quality modes remain planned.
+- Turn Delay ON; try Sync, 1/8, Dotted, Feedback 35–45%.
+- Wow adds slow tape drift; Flutter adds faster movement. Try one at a time at 20–40%.
+- EQ ON enables the Low Cut (high-pass) and High Cut (low-pass) sliders.
+  EQ shapes the complete processed delay signal, including the first echo and its core signal.
+- Master Mix 0% is the original; 100% is the complete processed signal including EQ.
+- Double-click any numeric readout, type a value, and press Enter. Escape cancels.
+  For frequency, examples are 2500, 2500 Hz or 2.5kHz. Cutoffs each cover 20 Hz–20 kHz.
+- Feedback Tone/Wear are removed. Their old automation will no longer apply.
 
-This artifact targets x64 Windows. No Visual Studio, JUCE, or Git is needed to use the compiled plugin.
+Use a short phrase with space afterward for listening. Echoes can increase peak level; leave headroom.
+The remaining modules and the final artwork are not ported yet. Report sound and control behavior in chat.

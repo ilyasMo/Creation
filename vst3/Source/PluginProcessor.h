@@ -15,6 +15,7 @@ public:
     void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
+    juce::AudioProcessorValueTreeState& getParameterState() noexcept { return parameters; }
     double getTailLengthSeconds() const override;
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
@@ -38,8 +39,9 @@ private:
     std::atomic<double> hostTempo { 120.0 };
     struct DelayParameters
     {
-        std::atomic<float> *enabled = nullptr, *sync = nullptr, *time = nullptr,
-            *feedback = nullptr, *tone = nullptr, *drive = nullptr,
+        std::atomic<float> *enabled = nullptr, *sync = nullptr, *eqEnabled = nullptr, *time = nullptr,
+            *feedback = nullptr, *lowCut = nullptr, *highCut = nullptr,
+            *wow = nullptr, *flutter = nullptr,
             *pingPong = nullptr, *mix = nullptr, *division = nullptr, *timing = nullptr;
     } delayParameters;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AfterglowProcessor)
