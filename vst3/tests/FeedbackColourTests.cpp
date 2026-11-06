@@ -21,6 +21,7 @@ int main()
             require(std::abs(10*std::log10(out/in)+3.0103)<.1,"EQ cutoff is not sample-rate consistent");
         }
     double value=0;
+    require(afterglow::parseParameterText(" +2,5 kHz","Hz",value)&&value==2500,"Signed frequency entry failed");
     require(afterglow::parseParameterText("2.5 kHz","Hz",value)&&value==2500,"Frequency entry failed");
     require(afterglow::parseParameterText("-3,5 dB","dB",value)&&value==-3.5,"Decimal-comma entry failed");
     require(afterglow::parseParameterText("45 %","%",value)&&value==45,"Percent entry failed");
