@@ -44,6 +44,11 @@ All existing parameter IDs and defaults remain. Older nonzero Wow/Flutter settin
 values, but their sound changes intentionally because Tape now acts on the main signal. New instances
 still start with Delay/Tape/EQ off, Wow/Flutter zero, Master Mix 100%, Output 0 dB.
 
-Age, saturation, noise and intentional tape tone shaping are postponed. Editor-size retention,
-Input/Output menu and preset/Save As work remain on the agreed list; this release focuses on the
-explicitly requested Wow/Flutter implementation.
+Age, saturation, noise and intentional tape tone shaping are postponed.
+
+## 0.6.0 editor and preset update
+
+The 0.5.0 Tape algorithm is unchanged. Editor-size retention, the Input/Output drawer and the
+preset/Save As workflow are implemented in 0.6.0. See PRESETS-NOTES.md for state and file behavior.
+Input trim precedes both the processed chain and its dry reference; Output trim follows Master Mix.
+Both are smoothed and neutral at 0 dB. They are outside the effects blend.

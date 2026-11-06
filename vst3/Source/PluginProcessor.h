@@ -3,10 +3,19 @@
 #include "GainStage.h"
 #include "DelayEngine.h"
 
-class AfterglowProcessor final : public juce::AudioProcessor
+class AfterglowProcessor final : public juce::AudioProcessor, private juce::AudioProcessorValueTreeState::Listener
 {
 public:
-    AfterglowProcessor();
+    explicit AfterglowProcessor(juce::File presetDirectory = {});
+    ~AfterglowProcessor() override;
+    juce::Point<int> editorSize() const noexcept;
+    void rememberEditorWidth(int width, bool notifyHost=true) noexcept;
+    juce::String currentPresetName() const;
+    juce::String presetDisplayName() const;
+    juce::Array<juce::File> userPresets() const;
+    void loadDefaultPreset();
+    juce::Result savePresetAs(const juce::String& name);
+    juce::Result loadPreset(const juce::File& file);
     const juce::String getName() const override { return JucePlugin_Name; }
     void prepareToPlay(double sampleRate, int maximumBlockSize) override;
     void releaseResources() override {}
@@ -32,6 +41,17 @@ private:
     void applyGain(juce::AudioBuffer<float>&, float linearGain);
     juce::AudioProcessorValueTreeState parameters;
     std::atomic<float>* outputGain = nullptr;
+    std::atomic<float>* inputGain = nullptr;
+    afterglow::GainStage inputGainStage;
+    const juce::File presetDirectory;
+    std::atomic<int> editorWidth { 1165 };
+    mutable juce::CriticalSection presetMetadataLock;
+    juce::String presetName { "Default" };
+    std::atomic<bool> presetDirty { false }, applyingPreset { false };
+    void parameterChanged(const juce::String&, float) override;
+    void setPresetIdentity(const juce::String&, bool dirty);
+    bool parametersAreDefault() const;
+    juce::Result applyPresetParameters(const juce::ValueTree&, const juce::String& name);
     afterglow::GainStage gainStage;
     afterglow::DelayEngine delayEngine;
     afterglow::DelaySettings readDelaySettings() const noexcept;

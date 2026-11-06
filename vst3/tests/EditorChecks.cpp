@@ -34,12 +34,102 @@ void drag(juce::Component& control,juce::Point<float> start,juce::Point<float> f
     const juce::MouseEvent moved(source,finish,modifiers,1,0,0,0,0,&control,&control,now,start,now,1,true);
     control.mouseDrag(moved);control.mouseUp(moved);
 }
+struct HostStateObserver final : juce::AudioProcessorListener
+{
+    juce::AudioProcessor& processor;bool notified=false;
+    explicit HostStateObserver(juce::AudioProcessor& p):processor(p){processor.addListener(this);}
+    ~HostStateObserver() override{processor.removeListener(this);}
+    void audioProcessorParameterChanged(juce::AudioProcessor*,int,float) override {}
+    void audioProcessorChanged(juce::AudioProcessor*,const ChangeDetails& details) override
+    {if(details.nonParameterStateChanged)notified=true;}
+};
+struct PresetFixture
+{
+    juce::File directory=juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("afterglow-preset-checks", "", false);
+    PresetFixture(){require(directory.createDirectory().wasOk(),"Cannot create preset fixture");}
+    ~PresetFixture(){directory.deleteRecursively();}
+};
+void checkPresetWorkflow(const juce::File& pictures)
+{
+    PresetFixture fixture;
+    AfterglowProcessor processor(fixture.directory);
+    HostStateObserver host(processor);
+    auto& state=processor.getParameterState();
+    auto set=[&](const char* id,float v){auto* p=state.getParameter(id);p->setValueNotifyingHost(p->convertTo0to1(v));};
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());editor->setVisible(true);
+    require(editor->getWidth()==1165&&editor->getHeight()==661,"Fresh editor size changed");
+    editor->setSize(1250,709);require(host.notified,"Resize did not notify host to save non-parameter state");editor.reset();
+    editor.reset(processor.createEditor());editor->setVisible(true);
+    require(editor->getWidth()==1250&&editor->getHeight()==709,"Editor size resets after close/reopen");
+    AfterglowProcessor other(fixture.directory);std::unique_ptr<juce::AudioProcessorEditor> otherEditor(other.createEditor());
+    otherEditor->setSize(915,519);
+    require(processor.editorSize().x==1250,"Another plugin instance changed this instance's size");
+    juce::MemoryBlock dimensions;processor.getStateInformation(dimensions);
+    AfterglowProcessor restoredSize(fixture.directory);restoredSize.setStateInformation(dimensions.getData(),static_cast<int>(dimensions.getSize()));
+    std::unique_ptr<juce::AudioProcessorEditor> restoredEditor(restoredSize.createEditor());
+    require(restoredEditor->getWidth()==1250&&restoredEditor->getHeight()==709,"Project recall did not restore editor size");
+    auto* menu=dynamic_cast<juce::ComboBox*>(find(*editor,"presetMenu"));
+    auto* saveAs=dynamic_cast<juce::TextButton*>(find(*editor,"savePresetAs"));
+    require(menu&&saveAs&&menu->getNumItems()==1&&menu->getText()=="Default","Missing fresh Default preset menu");
+    set("inputGain",3);set("outputGain",-5);set("tapeEnabled",1);set("delayWow",23);set("eqEnabled",1);set("eqLowCutHz",140);set("masterMix",72);
+    saveAs->onClick();auto* prompt=find(*editor,"savePresetPrompt");
+    auto* name=dynamic_cast<juce::TextEditor*>(find(*editor,"presetNameEntry"));
+    auto* confirm=dynamic_cast<juce::TextButton*>(find(*editor,"savePresetConfirm"));
+    require(prompt&&prompt->isVisible()&&name&&confirm,"Save As dialog does not open");
+    name->setText("Warm piano",false);save(*editor,pictures.getChildFile("Afterglow-Save-As.png"));confirm->onClick();
+    require(!prompt->isVisible()&&processor.currentPresetName()=="Warm piano","Save As did not complete");
+    const auto presets=processor.userPresets();require(presets.size()==1&&menu->getNumItems()==2,"Saved preset is missing from menu/disk");
+    const auto originalFile=presets[0].loadFileAsString();
+    require(processor.savePresetAs("Warm piano").failed()&&presets[0].loadFileAsString()==originalFile,"Save As overwrote an existing preset");
+    require(processor.savePresetAs("Default").failed(),"Factory Default can be overwritten");
+    require(processor.savePresetAs("../bad").failed(),"Preset name can escape its directory");
+    menu->setSelectedId(1,juce::sendNotificationSync);
+    require(processor.currentPresetName()=="Default","Default menu selection failed");
+    for(auto* parameter:processor.getParameters())require(std::abs(parameter->getValue()-parameter->getDefaultValue())<1e-6f,"Default does not restore startup parameters");
+    require(state.getRawParameterValue("masterMix")->load()==100&&state.getRawParameterValue("inputGain")->load()==0,"Default blend/gain is wrong");
+    require(editor->getWidth()==1250,"Loading Default changed editor size");
+    menu->setSelectedId(2,juce::sendNotificationSync);
+    require(processor.currentPresetName()=="Warm piano"&&state.getRawParameterValue("inputGain")->load()==3&&state.getRawParameterValue("outputGain")->load()==-5,"Custom preset did not reload gain settings");
+    require(state.getRawParameterValue("tapeEnabled")->load()>.5f&&state.getRawParameterValue("eqLowCutHz")->load()==140,"Custom preset did not reload effect settings");
+    require(editor->getWidth()==1250,"Loading custom preset resized the editor");
+    save(*editor,pictures.getChildFile("Afterglow-Presets.png"));
+    AfterglowProcessor fresh(fixture.directory);require(fresh.loadPreset(presets[0]).wasOk(),"Preset cannot load in a fresh processor");
+    require(fresh.getParameterState().getRawParameterValue("masterMix")->load()==72&&fresh.editorSize().x==1165,"Preset audio/geometry separation failed");
+    set("delayWow",27);require(processor.presetDisplayName().endsWith(" *"),"Modified preset is not marked dirty");
+    juce::MemoryBlock project;processor.getStateInformation(project);
+    AfterglowProcessor portable(fixture.directory.getChildFile("empty-bank"));portable.setStateInformation(project.getData(),static_cast<int>(project.getSize()));
+    require(portable.currentPresetName()=="Warm piano"&&portable.getParameterState().getRawParameterValue("delayWow")->load()==27&&portable.editorSize().x==1250,"Project needs the custom preset file to restore settings");
+    const auto malformed=fixture.directory.getChildFile("Broken.afterglowpreset");malformed.replaceWithText("not a preset");
+    require(processor.loadPreset(malformed).failed()&&state.getRawParameterValue("outputGain")->load()==-5,"Broken preset changed audio settings");
+    malformed.replaceWithText("<AFTERGLOW_PRESET formatVersion=\"1\" name=\"Broken\"><AfterglowState><PARAM id=\"outputGain\" value=\"nan\"/></AfterglowState></AFTERGLOW_PRESET>");
+    require(processor.loadPreset(malformed).failed()&&state.getRawParameterValue("outputGain")->load()==-5,"Invalid numeric preset changed audio settings");
+    auto* settings=dynamic_cast<juce::TextButton*>(find(*editor,"settings"));settings->onClick();
+    require(find(*editor,"delayPingPong")==nullptr,"Ping-pong is still in the settings menu");
+    require(find(*editor,"inputGain")->getParentComponent()->isVisible()&&find(*editor,"outputGain")->getParentComponent()->isVisible(),"Input/Output controls are inaccessible");
+    save(*editor,pictures.getChildFile("Afterglow-Input-Output.png"));
+    settings->onClick();processor.loadDefaultPreset();
+    auto* cancel=dynamic_cast<juce::TextButton*>(find(*editor,"savePresetCancel"));saveAs->onClick();cancel->onClick();
+    require(!prompt->isVisible(),"Save As cancel does not close the dialog");
+    // Real processor check: +6 dB input and -6 dB output must cancel with all effects off.
+    set("inputGain",6);set("outputGain",-6);processor.prepareToPlay(48000,4096);
+    juce::AudioBuffer<float> audio(2,4096);std::vector<float> source(4096);
+    for(int i=0;i<4096;++i){source[static_cast<size_t>(i)]=.1f*std::sin(i*.06f);audio.setSample(0,i,source[static_cast<size_t>(i)]);audio.setSample(1,i,-source[static_cast<size_t>(i)]);}
+    juce::MidiBuffer midi;processor.processBlock(audio,midi);
+    for(int i=288;i<4096;++i)require(std::abs(audio.getSample(0,i)-source[static_cast<size_t>(i-288)])<2e-6f,"Input/Output gain processing does not match controls");
+    set("outputGain",0);processor.prepareToPlay(48000,4096);
+    for(int i=0;i<4096;++i){audio.setSample(0,i,source[static_cast<size_t>(i)]);audio.setSample(1,i,source[static_cast<size_t>(i)]);}
+    processor.processBlock(audio,midi);const float gain=juce::Decibels::decibelsToGain(6.0f);
+    for(int i=288;i<4096;++i)require(std::abs(audio.getSample(0,i)-gain*source[static_cast<size_t>(i-288)])<2e-6f,"Input gain has no audible processing effect");
+    std::cout<<"Preset Save As/load/default, input/output audio, project state and editor reopen/resize checks passed.\n";
+}
+
 int main(int argc,char** argv)
 {
     juce::ScopedJuceInitialiser_GUI gui;
     try
     {
         const auto dir=argc>1?juce::File(argv[1]):juce::File::getCurrentWorkingDirectory();dir.createDirectory();
+        checkPresetWorkflow(dir);
         AfterglowProcessor processor;
         std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
         editor->setVisible(true);editor->setSize(1664,944);save(*editor,dir.getChildFile("Afterglow-Initial.png"));

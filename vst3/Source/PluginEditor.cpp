@@ -121,7 +121,8 @@ public:
     }
     void drawButtonBackground(juce::Graphics& g,juce::Button& b,const juce::Colour&,bool over,bool down) override
     {
-        if(over||down) { g.setColour(orange.withAlpha(down?.18f:.08f));g.fillRect(b.getLocalBounds()); }
+        if(b.getButtonText().isNotEmpty())box(g,b.getLocalBounds().toFloat().reduced(3),true,2.8f);
+        if(over||down)line(g,9,static_cast<float>(b.getHeight()-8),static_cast<float>(b.getWidth()-9),static_cast<float>(b.getHeight()-9),2,orange);
     }
     void drawButtonText(juce::Graphics& g,juce::TextButton& b,bool,bool) override
     {
@@ -328,6 +329,60 @@ private:
     std::array<std::unique_ptr<juce::ParameterAttachment>,2> attachments;
 };
 
+class PresetMenu final : public juce::ComboBox
+{
+public:
+    std::function<void()> beforePopup;
+    void showPopup() override {if(beforePopup)beforePopup();juce::ComboBox::showPopup();}
+};
+
+class PresetPrompt final : public juce::Component
+{
+public:
+    PresetPrompt()
+    {
+        setComponentID("savePresetPrompt");name.setComponentID("presetNameEntry");
+        name.setName("Preset name");name.setInputRestrictions(80);name.setFont(juce::Font(juce::FontOptions(32.0f)));
+        name.setColour(juce::TextEditor::textColourId,ink);name.setColour(juce::TextEditor::backgroundColourId,paper);
+        name.setColour(juce::TextEditor::highlightColourId,juce::Colour(0xfff1c582));name.setColour(juce::TextEditor::highlightedTextColourId,ink);
+        name.setColour(juce::TextEditor::outlineColourId,ink);name.setColour(juce::TextEditor::focusedOutlineColourId,orange);
+        save.setComponentID("savePresetConfirm");cancel.setComponentID("savePresetCancel");
+        addAndMakeVisible(name);addAndMakeVisible(save);addAndMakeVisible(cancel);
+        save.onClick=[this]
+        {
+            const auto result=saveAction?saveAction(name.getText()):juce::Result::fail("Saving is unavailable.");
+            if(result.wasOk()){close();if(onSaved)onSaved();}
+            else {error=result.getErrorMessage();repaint();name.grabKeyboardFocus();}
+        };
+        cancel.onClick=[this]{close();};name.onReturnKey=[this]{save.onClick();};name.onEscapeKey=[this]{close();};
+    }
+    void open(const juce::String& suggestion)
+    {
+        error.clear();name.setText(suggestion,false);setVisible(true);toFront(false);enterModalState(false);
+        name.grabKeyboardFocus();name.selectAll();repaint();
+    }
+    void close(){exitModalState(0);setVisible(false);}
+    void paint(juce::Graphics& g) override
+    {
+        box(g,getLocalBounds().toFloat().reduced(3),true,3.5f);
+        if(auto* look=dynamic_cast<InkLook*>(&getLookAndFeel()))g.setFont(look->font(35));
+        g.setColour(ink);g.drawText("Save preset as",25,15,getWidth()-50,40,juce::Justification::centredLeft);
+        if(error.isNotEmpty())
+        {
+            if(auto* look=dynamic_cast<InkLook*>(&getLookAndFeel()))g.setFont(look->font(23));
+            g.setColour(juce::Colour(0xff9a3d23));g.drawFittedText(error,{25,122,getWidth()-50,52},juce::Justification::centredLeft,2);
+        }
+    }
+    void resized() override
+    {name.setBounds(25,65,getWidth()-50,52);save.setBounds(getWidth()-300,185,125,52);cancel.setBounds(getWidth()-165,185,140,52);}
+    std::function<juce::Result(const juce::String&)> saveAction;
+    std::function<void()> onSaved;
+private:
+    juce::TextEditor name;
+    juce::TextButton save{"Save"},cancel{"Cancel"};
+    juce::String error;
+};
+
 class HeadingSwitch final : public juce::Button
 {
 public:
@@ -354,13 +409,13 @@ class AfterglowEditor::SketchPanel final : public juce::Component,private juce::
 {
 public:
     explicit SketchPanel(AfterglowProcessor& p)
-        : state(p.getParameterState()),mix(state,"masterMix"),time(state,"delayTimeMs"),
+        : processor(p),state(p.getParameterState()),mix(state,"masterMix"),time(state,"delayTimeMs"),
           feedback(state,"delayFeedback",false),wow(state,"delayWow"),flutter(state,"delayFlutter"),
-          filters(state),output(state,"outputGain",false),pingPong(state,"delayPingPong",false)
+          filters(state),input(state,"inputGain",false),output(state,"outputGain",false)
     {
         setLookAndFeel(&look);
         background=juce::ImageCache::getFromMemory(BinaryData::Faceplate_png,BinaryData::Faceplate_pngSize);
-        juce::Component* controls[]{&mix,&time,&feedback,&wow,&flutter,&filters,&sync,&delay,&tape,&eq,&settings,&notes,&styles};
+        juce::Component* controls[]{&mix,&time,&feedback,&wow,&flutter,&filters,&sync,&delay,&tape,&eq,&settings,&notes,&styles,&presetMenu,&saveAs};
         for(auto* c : controls)addAndMakeVisible(c);
         sync.setComponentID("delaySync");delay.setComponentID("delayEnabled");eq.setComponentID("eqEnabled");tape.setComponentID("tapeEnabled");
         delay.setArtwork(background,{464,125,230,72});tape.setArtwork(background,{900,125,210,72});eq.setArtwork(background,{1310,125,150,72});
@@ -372,9 +427,32 @@ public:
         eqAttachment=std::make_unique<State::ButtonAttachment>(state,"eqEnabled",eq);
         tapeAttachment=std::make_unique<State::ButtonAttachment>(state,"tapeEnabled",tape);
         syncAttachment=std::make_unique<State::ButtonAttachment>(state,"delaySync",sync);
-        settings.setComponentID("settings");settings.setTooltip("Output gain and stereo ping-pong settings.");
-        settings.onClick=[this]{drawerOpen=!drawerOpen;drawer.setVisible(drawerOpen);output.setVisible(drawerOpen);pingPong.setVisible(drawerOpen);resized();repaint();};
-        addChildComponent(output);addChildComponent(pingPong);
+        settings.setComponentID("settings");settings.setTooltip("Input and Output gain settings.");
+        settings.onClick=[this]{drawerOpen=!drawerOpen;drawer.setVisible(drawerOpen);input.setVisible(drawerOpen);output.setVisible(drawerOpen);resized();repaint();};
+        addChildComponent(input);addChildComponent(output);
+        presetMenu.setComponentID("presetMenu");presetMenu.setName("Preset");saveAs.setComponentID("savePresetAs");
+        presetMenu.beforePopup=[this]{refreshPresets();};
+        presetMenu.onChange=[this]
+        {
+            presetError.clear();
+            const int id=presetMenu.getSelectedId();
+            if(id==1)processor.loadDefaultPreset();
+            else if(id>=2&&id-2<presetFiles.size())
+            {
+                const auto result=processor.loadPreset(presetFiles[id-2]);
+                presetError=result.failed()?result.getErrorMessage():juce::String{};
+            }
+            refreshPresetDisplay();repaint();
+        };
+        saveAs.onClick=[this]
+        {
+            presetError.clear();
+            const auto name=processor.currentPresetName();
+            savePrompt.open(name=="Default"?"My preset":name+" copy");
+        };
+        savePrompt.saveAction=[this](const juce::String& name){return processor.savePresetAs(name);};
+        savePrompt.onSaved=[this]{presetError.clear();refreshPresets();};
+        addChildComponent(savePrompt);refreshPresets();
         notes.setComponentID("delayDivisionMenu");styles.setComponentID("delayTimingMenu");
         notes.addItemList(juce::StringArray{"1/1","1/2","1/4","1/8","1/16","1/32","1/64"},1);
         styles.addItemList(juce::StringArray{"Straight","Dotted","Triplet"},1);
@@ -389,6 +467,11 @@ public:
     void paint(juce::Graphics& g) override
     {
         g.drawImage(background,getLocalBounds().toFloat());
+        // Cover the old baked-in subtitle with a matching paper tile; controls are native children.
+        g.setTiledImageFill(background.getClippedImage({1110,16,400,80}),0,0,1.0f);
+        g.fillRect(552,15,958,80);
+        g.setColour(ink.withAlpha(.65f));g.setFont(look.font(22));
+        g.drawText("v"+juce::String(JucePlugin_VersionString),1480,867,140,30,juce::Justification::centredRight);
         // Settings mark is functional, matching the ink drawing rather than a stock gear.
         g.setColour(ink);g.setFont(look.font(72));g.drawText("*",1568,20,70,70,juce::Justification::centred);
     }
@@ -398,12 +481,19 @@ public:
         {
             // Labels remain above the two controls; the paper drawer is painted by a child below them.
             g.setColour(ink);g.setFont(look.font(27));
-            g.drawText("OUTPUT",1190,106,160,34,juce::Justification::centredLeft);
-            g.drawText("PING-PONG",1190,206,180,34,juce::Justification::centredLeft);
+            g.drawText("INPUT",1190,106,160,34,juce::Justification::centredLeft);
+            g.drawText("OUTPUT",1190,206,180,34,juce::Justification::centredLeft);
+        }
+        if(presetError.isNotEmpty())
+        {
+            g.setColour(juce::Colour(0xff9a3d23));g.setFont(look.font(22));
+            g.drawFittedText(presetError,{575,93,930,32},juce::Justification::centredLeft,1);
         }
     }
     void resized() override
     {
+        presetMenu.setBounds(575,22,660,64);saveAs.setBounds(1250,22,185,64);
+        savePrompt.setBounds(560,105,680,255);
         mix.setBounds(114,242,166,609);
         time.setBounds(418,350,166,382);
         feedback.setBounds(353,779,409,73);
@@ -413,12 +503,27 @@ public:
         delay.setBounds(464,125,230,72);tape.setBounds(900,125,210,72);eq.setBounds(1310,125,150,72);
         notes.setBounds(604,355,166,50);styles.setBounds(604,418,166,50);
         settings.setBounds(1568,20,70,70);
-        drawer.setBounds(1162,92,478,251);output.setBounds(1190,139,420,66);pingPong.setBounds(1190,239,420,66);
+        drawer.setBounds(1162,92,478,251);input.setBounds(1190,139,420,66);output.setBounds(1190,239,420,66);
     }
 private:
     class PaperDrawer final : public juce::Component
     {void paint(juce::Graphics& g) override {box(g,getLocalBounds().toFloat().reduced(3),true,3);}} drawer;
-    void timerCallback() override {updateSync();}
+    void timerCallback() override {updateSync();refreshPresetDisplay();}
+    void refreshPresets()
+    {
+        presetFiles=processor.userPresets();presetMenu.clear(juce::dontSendNotification);
+        presetMenu.addItem("Default",1);
+        for(int i=0;i<presetFiles.size();++i)presetMenu.addItem(presetFiles[i].getFileNameWithoutExtension(),i+2);
+        refreshPresetDisplay();
+    }
+    void refreshPresetDisplay()
+    {
+        if(!presetMenu.isPopupActive())
+        {
+            const auto name=processor.presetDisplayName();
+            if(presetMenu.getText()!=name)presetMenu.setText(name,juce::dontSendNotification);
+        }
+    }
     void updateSync()
     {
         const bool now=state.getRawParameterValue("delaySync")->load()>=.5f;
@@ -439,10 +544,11 @@ private:
         time.refresh();
         if(drawer.getParentComponent()==nullptr)
         {
-            addChildComponent(drawer);drawer.toFront(false);output.toFront(false);pingPong.toFront(false);
+            addChildComponent(drawer);drawer.toFront(false);input.toFront(false);output.toFront(false);savePrompt.toFront(false);
         }
         drawer.setVisible(drawerOpen);
     }
+    AfterglowProcessor& processor;
     State& state;
     InkLook look;
     juce::Image background;
@@ -452,22 +558,35 @@ private:
     HeadingSwitch delay{"DELAY"},tape{"TAPE"},eq{"EQ"};
     juce::ComboBox notes,styles;
     juce::TextButton settings;
-    InkFader output,pingPong;
+    InkFader input,output;
+    PresetMenu presetMenu;
+    juce::TextButton saveAs{"Save As"};
+    PresetPrompt savePrompt;
+    juce::Array<juce::File> presetFiles;
+    juce::String presetError;
     bool synced=false,initialised=false,drawerOpen=false;
     std::unique_ptr<State::ButtonAttachment> delayAttachment,tapeAttachment,eqAttachment,syncAttachment;
     std::unique_ptr<State::ComboBoxAttachment> noteAttachment,styleAttachment;
 };
 
-AfterglowEditor::AfterglowEditor(AfterglowProcessor& p) : AudioProcessorEditor(p),panel(std::make_unique<SketchPanel>(p))
+AfterglowEditor::AfterglowEditor(AfterglowProcessor& p) : AudioProcessorEditor(p),processor(p),panel(std::make_unique<SketchPanel>(p))
 {
+    const auto remembered=processor.editorSize();
     addAndMakeVisible(*panel);
     setResizable(true,true);setResizeLimits(915,519,1664,944);
     if(auto* c=getConstrainer())c->setFixedAspectRatio(1664.0/944.0);
-    setSize(1165,661);
+    setSize(remembered.x,remembered.y);sizeReady=true;processor.rememberEditorWidth(getWidth());startTimerHz(10);
 }
-AfterglowEditor::~AfterglowEditor()=default;
+AfterglowEditor::~AfterglowEditor()
+{stopTimer();if(sizeReady)processor.rememberEditorWidth(getWidth());}
+void AfterglowEditor::timerCallback()
+{
+    const auto remembered=processor.editorSize();
+    if(getWidth()!=remembered.x||getHeight()!=remembered.y)setSize(remembered.x,remembered.y);
+}
 void AfterglowEditor::resized()
 {
     const float scale=juce::jmin(static_cast<float>(getWidth())/1664.0f,static_cast<float>(getHeight())/944.0f);
     panel->setTransform(juce::AffineTransform::scale(scale));panel->setTopLeftPosition(0,0);
+    if(sizeReady)processor.rememberEditorWidth(getWidth());
 }

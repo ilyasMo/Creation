@@ -1,4 +1,4 @@
-AFTERGLOW 0.5.0 — INDEPENDENT WOW / FLUTTER
+AFTERGLOW 0.6.0 — PRESETS, WINDOW SIZE AND INPUT / OUTPUT
 
 1. Close Ableton before replacing the plugin.
 2. Extract Afterglow-Windows-VST3 from the successful GitHub Actions run.
@@ -7,7 +7,7 @@ AFTERGLOW 0.5.0 — INDEPENDENT WOW / FLUTTER
 
 LATENCY: nominal 6 ms, fixed for dry/processed/bypass. Ableton compensates playback timing.
 
-STARTUP: Delay OFF, Tape OFF, EQ OFF, Wow/Flutter 0%, Master Mix 100%, Output gain 0 dB.
+STARTUP: Delay OFF, Tape OFF, EQ OFF, Wow/Flutter 0%, Master Mix 100%, Input and Output gain 0 dB.
 
 - Click DELAY, TAPE or EQ to enable/bypass that section. Grey lettering means bypassed.
   Tape bypass preserves the Wow/Flutter amounts.
@@ -24,7 +24,21 @@ STARTUP: Delay OFF, Tape OFF, EQ OFF, Wow/Flutter 0%, Master Mix 100%, Output ga
 - Feedback Tone/Wear are removed. Their old automation will no longer apply.
 
 Use a short phrase with space afterward for listening. Echoes can increase peak level; leave headroom.
-The top-right asterisk opens Output gain and Ping-pong. Drag the corner to resize the editor.
+The top-right asterisk opens Input and Output gain. Ping-pong is no longer in that drawer.
+Input trim is before the dry/wet split; Output trim follows Master Mix. Both are outside the effects blend.
+Drag the corner to resize the editor. Each instance remembers its size after closing/reopening.
+Save your Live project to retain that size for its next session.
 Shift-drag faders for finer control. The remaining effect modules are not ported yet.
 Saved amounts remain, but the Tape sound has intentionally changed from echo-only modulation.
+PRESETS
+- The top menu replaces Tape / Echo / Colour. Choose Default to restore the startup settings.
+- Save As opens a name box. Enter a custom name and click Save (or press Enter). Escape/Cancel cancels.
+- Choose a saved preset from the menu to recall every audio parameter, including Input and Output.
+- Presets keep your current window size. An asterisk after the preset name means settings changed.
+- Existing names are protected: choose a new name when saving another version.
+- Windows preset folder: %APPDATA%\Creation Audio\Afterglow\Presets
+- Saved projects contain their settings and preset name, even without the original preset file.
+- The footer reads v0.6.0. If it does not, Live is still loading an older plugin copy.
+
+Wow/Flutter processing is unchanged from 0.5.0. Age and saturation remain postponed.
 Report sound and control behavior in chat.

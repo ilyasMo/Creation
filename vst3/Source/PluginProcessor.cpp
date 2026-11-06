@@ -33,17 +33,23 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameters()
     number("delayPingPong", "Ping-pong", 0, 100, 0.1f, 0, "%");
     number("masterMix", "Master Mix", 0, 100, 0.1f, 100, "%");
     layout.add(std::make_unique<juce::AudioParameterBool>(ID { "tapeEnabled", 1 }, "Tape ON", false));
+    number("inputGain", "Input gain", -24, 12, 0.1f, 0, "dB");
     return layout;
 }
 }
 
-AfterglowProcessor::AfterglowProcessor()
+AfterglowProcessor::AfterglowProcessor(juce::File directory)
     : AudioProcessor(BusesProperties()
           .withInput("Input", juce::AudioChannelSet::stereo(), true)
           .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters(*this, nullptr, "AfterglowState", createParameters())
+      parameters(*this, nullptr, "AfterglowState", createParameters()),
+      presetDirectory(directory == juce::File{} ? juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+          .getChildFile("Creation Audio").getChildFile("Afterglow").getChildFile("Presets") : directory)
 {
     outputGain = parameters.getRawParameterValue("outputGain");
+    inputGain = parameters.getRawParameterValue("inputGain");
+    for(auto* parameter:getParameters())
+        if(auto* ranged=dynamic_cast<juce::RangedAudioParameter*>(parameter))parameters.addParameterListener(ranged->paramID,this);
     auto& p = delayParameters;
     p.enabled = parameters.getRawParameterValue("delayEnabled");
     p.sync = parameters.getRawParameterValue("delaySync");
@@ -107,6 +113,7 @@ void AfterglowProcessor::prepareToPlay(double sampleRate, int)
 {
     updateTempo();
     delayEngine.prepare(sampleRate, readDelaySettings());
+    inputGainStage.prepare(sampleRate, juce::Decibels::decibelsToGain(inputGain->load()));
     gainStage.prepare(sampleRate, juce::Decibels::decibelsToGain(outputGain->load()));
     setLatencySamples(delayEngine.latencySamples());
 }
@@ -125,6 +132,8 @@ void AfterglowProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 {
     juce::ScopedNoDenormals noDenormals;
     updateTempo();
+    inputGainStage.process(buffer.getArrayOfWritePointers(),getTotalNumInputChannels(),buffer.getNumSamples(),
+                           juce::Decibels::decibelsToGain(inputGain->load()));
     delayEngine.process(buffer.getArrayOfWritePointers(), getTotalNumInputChannels(),
                         buffer.getNumSamples(), readDelaySettings());
     applyGain(buffer, juce::Decibels::decibelsToGain(outputGain->load()));
@@ -134,6 +143,7 @@ void AfterglowProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, 
 {
     juce::ScopedNoDenormals noDenormals;
     updateTempo();
+    inputGainStage.process(buffer.getArrayOfWritePointers(),getTotalNumInputChannels(),buffer.getNumSamples(),1.0f);
     auto settings = readDelaySettings();
     settings.enabled = false; settings.eqEnabled = false; settings.mix = 0;
     delayEngine.process(buffer.getArrayOfWritePointers(), getTotalNumInputChannels(),
@@ -149,7 +159,11 @@ juce::AudioProcessorEditor* AfterglowProcessor::createEditor()
 void AfterglowProcessor::getStateInformation(juce::MemoryBlock& data)
 {
     if (auto xml = parameters.copyState().createXml())
+    {
+        const auto size=editorSize();xml->setAttribute("editorWidth",size.x);xml->setAttribute("editorHeight",size.y);
+        xml->setAttribute("presetName",currentPresetName());xml->setAttribute("presetDirty",presetDirty.load());
         copyXmlToBinary(*xml, data);
+    }
 }
 
 void AfterglowProcessor::setStateInformation(const void* data, int sizeInBytes)
@@ -185,7 +199,13 @@ void AfterglowProcessor::setStateInformation(const void* data, int sizeInBytes)
                         child.setProperty("value", ranged->convertFrom0to1(ranged->getDefaultValue()), nullptr);
                         restored.appendChild(child, nullptr);
                     }
+            applyingPreset.store(true);
             parameters.replaceState(restored);
+            applyingPreset.store(false);
+            if(xml->hasAttribute("editorWidth"))rememberEditorWidth(xml->getIntAttribute("editorWidth",1165),false);
+            const auto name=xml->getStringAttribute("presetName","Default").trim().substring(0,80);
+            setPresetIdentity(name.isEmpty()?"Default":name,xml->hasAttribute("presetDirty")
+                ? xml->getBoolAttribute("presetDirty") : !parametersAreDefault());
         }
 }
 
