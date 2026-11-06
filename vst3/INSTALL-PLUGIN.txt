@@ -1,17 +1,27 @@
-AFTERGLOW VST3 STARTER — INSTALL
+AFTERGLOW — NATIVE DELAY TEST BUILD
 
-This is the first native checkpoint: audio passes through at Output gain 0 dB.
-The full browser interface and effects have not been ported yet.
-
-1. Extract the artifact ZIP from GitHub Actions.
-2. Copy the entire Afterglow.vst3 folder to:
+1. Close Ableton before replacing the plugin.
+2. Extract the artifact ZIP from GitHub Actions.
+3. Replace the ENTIRE Afterglow.vst3 folder in:
    C:\Program Files\Common Files\VST3
-   Create the VST3 folder if needed. Windows may request administrator permission.
-3. In Ableton Settings/Preferences > Plug-Ins, enable VST3 system folders and Rescan.
-4. Find Afterglow under Plug-Ins and put it on an audio track.
-5. Play a recording at low speaker/headphone volume. At Output gain 0 dB, audio should pass normally.
-6. Test gain changes, automation, and saving/reopening a project.
+4. Reopen Live 11. In Preferences > Plug-Ins, enable VST3 system folders and Rescan.
+5. Load Afterglow on an audio track. Set Output gain to 0 dB and start with low listening volume.
 
-This artifact is for x64 Windows. It is not a Mac AU, Mac VST3, or Windows ARM build.
-No Visual Studio, JUCE, or Git installation is needed to use the compiled plugin.
-Report failures in the Codex chat, including your Ableton version and the exact error.
+FIRST LISTEN:
+- Delay ON: enabled. Master Mix: 100%.
+- Sync to host: enabled. Synced note: 1/8. Note style: Dotted.
+- Feedback: 35%. Feedback tone: 4000 Hz. Feedback wear: 25%.
+- At 120 BPM, echoes should be spaced 375 ms apart. Change Ableton's tempo and confirm they follow.
+- Lower Feedback tone to make successive repeats darker. Increase wear for feedback saturation.
+- Ping-pong moves repeats across stereo channels. Mono tracks retain a mono delay.
+- In Free mode, Free delay time sets milliseconds; it is unused while Sync is enabled.
+- The core signal stays present. Master Mix blends the complete insert processing with the original.
+- All new processing starts OFF, with Mix at 100%. Gain-only saved projects retain their gain setting.
+
+Sound-shaping parameters are exposed for host automation and project recall.
+This is a basic native editor for sound testing; the artwork and remaining browser modules are not ported yet.
+Buffer preparation allocates memory outside processing; control changes are smoothed and delay taps crossfade.
+The delay buffer holds up to 24 seconds. Extremely slow synced divisions clamp to this maximum.
+Feedback wear is a basic soft saturator; dedicated oversampling/quality modes remain planned.
+
+This artifact targets x64 Windows. No Visual Studio, JUCE, or Git is needed to use the compiled plugin.

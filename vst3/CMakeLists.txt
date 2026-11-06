@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Afterglow VERSION 0.1.0 LANGUAGES C CXX)
+project(Afterglow VERSION 0.2.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(AFTERGLOW_CORE_TESTS_ONLY "Build the portable processing tests without JUCE" OFF)
@@ -7,6 +7,8 @@ if(AFTERGLOW_CORE_TESTS_ONLY)
     enable_testing()
     add_executable(afterglow_core_tests tests/GainStageTests.cpp)
     add_test(NAME afterglow_core_tests COMMAND afterglow_core_tests)
+    add_executable(afterglow_delay_tests tests/DelayEngineTests.cpp)
+    add_test(NAME afterglow_delay_tests COMMAND afterglow_delay_tests)
     return()
 endif()
 if(POLICY CMP0135)
@@ -34,7 +36,7 @@ juce_add_plugin(Afterglow
     COPY_PLUGIN_AFTER_BUILD FALSE
     VST3_CATEGORIES Fx
 )
-target_sources(Afterglow PRIVATE Source/PluginProcessor.cpp Source/PluginProcessor.h Source/GainStage.h)
+target_sources(Afterglow PRIVATE Source/PluginProcessor.cpp Source/PluginProcessor.h Source/GainStage.h Source/DelayEngine.h)
 target_compile_definitions(Afterglow PUBLIC
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0
 )

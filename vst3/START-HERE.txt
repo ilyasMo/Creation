@@ -4,9 +4,9 @@ The instructions below are only for building locally.
 
 AFTERGLOW — FIRST WINDOWS VST3 BUILD
 
-This is the first native development checkpoint: a real VST3 with a simple Output gain control.
-At 0 dB, audio passes unchanged. It supports mono/stereo and saves its gain setting in DAW projects.
-The browser effects and artwork are not ported yet. They will be developed after this checkpoint loads.
+This is the first native development checkpoint: a real VST3 with the first native delay engine and Output gain control.
+With Delay OFF and Output gain 0 dB, audio passes unchanged. It supports mono/stereo and host state recall.
+See INSTALL-PLUGIN.txt for the delay listening recipe. Other native effects and artwork remain to be developed.
 
 1. Extract the entire ZIP (right-click > Extract All). Do not run it inside the ZIP.
 2. Open the extracted Afterglow-VST3-Starter folder.

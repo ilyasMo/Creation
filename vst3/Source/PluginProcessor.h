@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "GainStage.h"
+#include "DelayEngine.h"
 
 class AfterglowProcessor final : public juce::AudioProcessor
 {
@@ -14,7 +15,7 @@ public:
     void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
-    double getTailLengthSeconds() const override { return 0.0; }
+    double getTailLengthSeconds() const override;
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
@@ -31,5 +32,15 @@ private:
     juce::AudioProcessorValueTreeState parameters;
     std::atomic<float>* outputGain = nullptr;
     afterglow::GainStage gainStage;
+    afterglow::DelayEngine delayEngine;
+    afterglow::DelaySettings readDelaySettings() const noexcept;
+    void updateTempo();
+    std::atomic<double> hostTempo { 120.0 };
+    struct DelayParameters
+    {
+        std::atomic<float> *enabled = nullptr, *sync = nullptr, *time = nullptr,
+            *feedback = nullptr, *tone = nullptr, *drive = nullptr,
+            *pingPong = nullptr, *mix = nullptr, *division = nullptr, *timing = nullptr;
+    } delayParameters;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AfterglowProcessor)
 };
