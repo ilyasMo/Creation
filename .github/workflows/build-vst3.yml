@@ -1,0 +1,49 @@
+name: Build Afterglow VST3
+
+on:
+  push:
+    paths:
+      - 'vst3/**'
+      - '.github/workflows/build-vst3.yml'
+  pull_request:
+    paths:
+      - 'vst3/**'
+      - '.github/workflows/build-vst3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-vst3:
+    name: Windows x64 VST3
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v4
+      - name: Configure processing tests
+        run: cmake -S vst3 -B build-tests -G "Visual Studio 17 2022" -A x64 -DAFTERGLOW_CORE_TESTS_ONLY=ON
+      - name: Build processing tests
+        run: cmake --build build-tests --config Release --parallel 2
+      - name: Run processing tests
+        run: ctest --test-dir build-tests -C Release --output-on-failure
+      - name: Configure Windows plugin
+        run: cmake -S vst3 -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build Windows plugin
+        run: cmake --build build --config Release --target Afterglow_VST3 --parallel 2
+      - name: Package plugin
+        shell: pwsh
+        run: |
+          $plugin = 'build/Afterglow_artefacts/Release/VST3/Afterglow.vst3'
+          if (-not (Test-Path $plugin)) { throw 'Expected VST3 bundle was not built.' }
+          New-Item -ItemType Directory -Path staging -Force | Out-Null
+          Copy-Item -Path $plugin -Destination staging -Recurse
+          Copy-Item -Path vst3/INSTALL-PLUGIN.txt -Destination staging
+      - name: Upload Windows plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: Afterglow-Windows-VST3
+          path: staging/
+          if-no-files-found: error
+          retention-days: 30

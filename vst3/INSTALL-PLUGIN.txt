@@ -1,0 +1,17 @@
+AFTERGLOW VST3 STARTER — INSTALL
+
+This is the first native checkpoint: audio passes through at Output gain 0 dB.
+The full browser interface and effects have not been ported yet.
+
+1. Extract the artifact ZIP from GitHub Actions.
+2. Copy the entire Afterglow.vst3 folder to:
+   C:\Program Files\Common Files\VST3
+   Create the VST3 folder if needed. Windows may request administrator permission.
+3. In Ableton Settings/Preferences > Plug-Ins, enable VST3 system folders and Rescan.
+4. Find Afterglow under Plug-Ins and put it on an audio track.
+5. Play a recording at low speaker/headphone volume. At Output gain 0 dB, audio should pass normally.
+6. Test gain changes, automation, and saving/reopening a project.
+
+This artifact is for x64 Windows. It is not a Mac AU, Mac VST3, or Windows ARM build.
+No Visual Studio, JUCE, or Git installation is needed to use the compiled plugin.
+Report failures in the Codex chat, including your Ableton version and the exact error.

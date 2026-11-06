@@ -1,0 +1,36 @@
+GITHUB OPTION: Open the repository Actions tab, choose Build Afterglow VST3, and download the
+Afterglow-Windows-VST3 artifact from a successful run. See INSTALL-PLUGIN.txt for installing it.
+The instructions below are only for building locally.
+
+AFTERGLOW — FIRST WINDOWS VST3 BUILD
+
+This is the first native development checkpoint: a real VST3 with a simple Output gain control.
+At 0 dB, audio passes unchanged. It supports mono/stereo and saves its gain setting in DAW projects.
+The browser effects and artwork are not ported yet. They will be developed after this checkpoint loads.
+
+1. Extract the entire ZIP (right-click > Extract All). Do not run it inside the ZIP.
+2. Open the extracted Afterglow-VST3-Starter folder.
+3. Double-click Build-Windows.cmd. Stay connected to the Internet for the first build.
+4. The script finds Visual Studio's C++/CMake tools, downloads the pinned JUCE source with checksum
+   verification, then builds x64 Release using two parallel jobs. A first build can take several minutes.
+5. When SUCCESS appears, Explorer opens the output folder.
+6. Copy the ENTIRE Afterglow.vst3 folder to C:\Program Files\Common Files\VST3.
+   Create the VST3 folder if it does not exist. Windows may prompt for administrator permission.
+7. Open Ableton > Settings/Preferences > Plug-Ins. Enable VST3 system folders and click Rescan.
+8. Put Afterglow on an audio track and play a recording. Start with low speaker/headphone volume.
+   At Output gain 0 dB, toggling bypass should not change level after the short ramp settles.
+9. Test the Output gain, automation, and saving/reopening a project. Report any errors here.
+
+Visual Studio Community 2026 with Desktop development with C++ and C++ CMake tools is required.
+This script targets x64 Windows. Tell Codex if your Windows computer uses ARM rather than Intel/AMD.
+No separate JUCE, Git, or CMake installation is required if the Visual Studio components are present.
+Do not run the build as administrator. Only copying into Program Files may require permission.
+
+If a build fails: leave the command window open and share the first error. Do not download random fixes.
+
+Validation so far: portable gain engine tests passed on Linux at 44.1/48/96 kHz, including mono/stereo
+unity, smooth gain changes and bypass return. Windows compilation and DAW validation must be performed
+on your computer; these have not yet been verified in this cloud workspace.
+
+JUCE 8.0.15 is downloaded from the official juce-framework repository. Review JUCE licensing before
+releasing a product. This starter does not imply a licence for distributing a closed-source JUCE plugin.
