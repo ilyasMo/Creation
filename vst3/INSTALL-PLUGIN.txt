@@ -22,6 +22,6 @@ Sound-shaping parameters are exposed for host automation and project recall.
 This is a basic native editor for sound testing; the artwork and remaining browser modules are not ported yet.
 Buffer preparation allocates memory outside processing; control changes are smoothed and delay taps crossfade.
 The delay buffer holds up to 24 seconds. Extremely slow synced divisions clamp to this maximum.
-Feedback wear is a basic soft saturator; dedicated oversampling/quality modes remain planned.
+Feedback wear now uses antiderivative antialiasing; dedicated oversampling/quality modes remain planned.
 
 This artifact targets x64 Windows. No Visual Studio, JUCE, or Git is needed to use the compiled plugin.

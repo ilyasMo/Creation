@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <vector>
+#include "FeedbackColour.h"
 
 namespace afterglow
 {
@@ -23,7 +24,7 @@ inline double delaySeconds(const DelaySettings& s) noexcept
     const auto seconds = s.sync
         ? 60.0 / tempo * beats[static_cast<size_t>(std::clamp(s.division, 0, 6))] * style
         : static_cast<double>(s.timeMs) / 1000.0;
-    return std::clamp(std::isfinite(seconds) ? seconds : 0.320, 0.020, 24.0);
+    return std::clamp(std::isfinite(seconds) ? seconds : 0.320, s.sync ? 0.001 : 0.020, 24.0);
 }
 
 class DelayEngine
@@ -35,18 +36,20 @@ public:
         const auto size = static_cast<size_t>(std::ceil(rate * 24.0)) + 8;
         for (auto& channel : ring) channel.assign(size, 0.0f);
         write = 0;
-        low1.fill(0); low2.fill(0); previousInput.fill(0); highState.fill(0);
+        for (auto& filter : toneFilters) filter.reset();
+        for (auto& saturator : saturators) saturator.reset();
+        previousInput.fill(0); highState.fill(0);
         delayA = delayB = requested = delaySeconds(settings) * rate;
         fadeLength = std::max(1, static_cast<int>(rate * 0.040));
         fadePosition = fadeLength;
         smoothing = static_cast<float>(1.0 - std::exp(-1.0 / (rate * 0.020)));
-        highCoefficient = static_cast<float>(std::exp(-2.0 * pi * 50.0 / rate));
+        highCoefficient = static_cast<float>(std::exp(-2.0 * pi * 30.0 / rate));
         active = settings.enabled ? 1.0f : 0.0f;
         feedback = safe(settings.feedback, 0.0f, 0.95f);
         mix = safe(settings.mix, 0.0f, 1.0f);
         drive = safe(settings.drive, 0.0f, 1.0f) * 4.0f;
         pingPong = safe(settings.pingPong, 0.0f, 1.0f);
-        lowCoefficient = toneCoefficient(settings.toneHz);
+        toneConductance = toneCoefficient(settings.toneHz);
     }
 
     void process(float* const* channels, int channelCount, int samples,
@@ -64,7 +67,7 @@ public:
         {
             approach(active, targetActive); approach(feedback, targetFeedback);
             approach(mix, targetMix); approach(drive, targetDrive);
-            approach(pingPong, targetPingPong); approach(lowCoefficient, targetLow);
+            approach(pingPong, targetPingPong); approach(toneConductance, targetLow);
             if (active * mix < 1.0e-6f)
             {
                 delayA = delayB = requested;
@@ -84,10 +87,8 @@ public:
                     : first + (read(ch, delayB) - first) * blend;
                 const float hp = highCoefficient * (highState[ch] + tap[ch] - previousInput[ch]);
                 previousInput[ch] = tap[ch]; highState[ch] = hp;
-                low1[ch] += lowCoefficient * (hp - low1[ch]);
-                low2[ch] += lowCoefficient * (low1[ch] - low2[ch]);
-                const float coloured = drive < 0.0001f ? low2[ch]
-                    : std::tanh(drive * low2[ch]) / drive;
+                const float filtered = toneFilters[ch].process(hp, toneConductance);
+                const float coloured = saturators[ch].process(filtered, drive);
                 loop[ch] = coloured * feedback;
             }
             const float left = channels[0][i];
@@ -116,9 +117,7 @@ private:
     }
     float toneCoefficient(float frequency) const noexcept
     {
-        // Two dampers in the feedback loop. Calibrate the combined corner approximately.
-        const double f = std::min(rate * 0.45, static_cast<double>(safe(frequency, 500, 14000)) * 1.553774);
-        return static_cast<float>(1.0 - std::exp(-2.0 * pi * f / rate));
+        return FeedbackLowPass::conductance(rate, safe(frequency, 500, 14000));
     }
     float read(size_t ch, double delay) const noexcept
     {
@@ -133,10 +132,12 @@ private:
                          + x * (3.0f * (b - c) + d - a)));
     }
     std::array<std::vector<float>, 2> ring;
-    std::array<float, 2> low1 {}, low2 {}, previousInput {}, highState {};
+    std::array<float, 2> previousInput {}, highState {};
+    std::array<FeedbackLowPass, 2> toneFilters;
+    std::array<FeedbackSaturator, 2> saturators;
     size_t write = 0;
     double rate = 48000.0, delayA = 15360, delayB = 15360, requested = 15360;
-    float smoothing = 0.001f, highCoefficient = 0.99f, lowCoefficient = 0.5f;
+    float smoothing = 0.001f, highCoefficient = 0.99f, toneConductance = 0.5f;
     float active = 0, feedback = 0, mix = 1, drive = 0, pingPong = 0;
     int fadeLength = 1920, fadePosition = 1920;
 };

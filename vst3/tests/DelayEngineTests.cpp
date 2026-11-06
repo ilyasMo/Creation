@@ -26,9 +26,15 @@ int main()
     check(std::abs(afterglow::delaySeconds(s) - 0.25) < 1e-9, "Straight sync incorrect");
     s.timing = 1; check(std::abs(afterglow::delaySeconds(s) - 0.375) < 1e-9, "Dotted sync incorrect");
     s.timing = 2; check(std::abs(afterglow::delaySeconds(s) - 1.0/6.0) < 1e-9, "Triplet sync incorrect");
+    s.bpm = 240; s.division = 6; s.timing = 0;
+    check(std::abs(afterglow::delaySeconds(s) - 0.015625) < 1e-9, "Fast 64th note incorrectly clamped");
     s.bpm = 0; check(std::isfinite(afterglow::delaySeconds(s)), "Missing tempo unsafe");
     s.bpm = 0.1; s.division = 0; check(afterglow::delaySeconds(s) <= 24.0, "Delay capacity exceeded");
-    for (double rate : { 44100.0, 48000.0, 96000.0 })
+    s = {}; s.enabled = true; s.sync = true; s.bpm = 240; s.division = 6; s.feedback = 0;
+    auto fastImpulse = empty(4800); fastImpulse[0][0] = 1;
+    auto fastOutput = render(s, 48000, fastImpulse);
+    check(std::abs(fastOutput[0][750] - .5f) < 1e-4f, "Fast synced echo timing incorrect");
+    for (double rate : { 44100.0, 48000.0, 96000.0, 192000.0 })
     {
         s = {}; s.timeMs = 40; s.feedback = 0; s.drive = 0;
         auto input = empty(static_cast<int>(rate)); input[0][0] = input[1][0] = 1;
