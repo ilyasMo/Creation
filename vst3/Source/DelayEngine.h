@@ -9,7 +9,7 @@ namespace afterglow
 {
 struct DelaySettings
 {
-    bool enabled = false, sync = false, eqEnabled = false;
+    bool enabled = false, sync = false, eqEnabled = false, tapeEnabled = false;
     float timeMs = 320.0f, feedback = 0.35f, lowCutHz = 20.0f, highCutHz = 20000.0f;
     float wow = 0.0f, flutter = 0.0f, pingPong = 0.0f, mix = 1.0f;
     int division = 3, timing = 0;
@@ -47,8 +47,8 @@ public:
         eqActive = settings.eqEnabled ? 1.0f : 0.0f;
         feedback = safe(settings.feedback, 0.0f, 0.95f);
         mix = safe(settings.mix, 0.0f, 1.0f);
-        wow = safe(settings.wow, 0.0f, 1.0f);
-        flutter = safe(settings.flutter, 0.0f, 1.0f);
+        wow = settings.tapeEnabled ? safe(settings.wow, 0.0f, 1.0f) : 0.0f;
+        flutter = settings.tapeEnabled ? safe(settings.flutter, 0.0f, 1.0f) : 0.0f;
         pingPong = safe(settings.pingPong, 0.0f, 1.0f);
         lowCutG = filterCoefficient(settings.lowCutHz);
         highCutG = filterCoefficient(settings.highCutHz);
@@ -63,8 +63,8 @@ public:
         const float targetEq = settings.eqEnabled ? 1.0f : 0.0f;
         const float targetFeedback = safe(settings.feedback, 0.0f, 0.95f);
         const float targetMix = safe(settings.mix, 0.0f, 1.0f);
-        const float targetWow = safe(settings.wow, 0.0f, 1.0f);
-        const float targetFlutter = safe(settings.flutter, 0.0f, 1.0f);
+        const float targetWow = settings.tapeEnabled ? safe(settings.wow, 0.0f, 1.0f) : 0.0f;
+        const float targetFlutter = settings.tapeEnabled ? safe(settings.flutter, 0.0f, 1.0f) : 0.0f;
         const float targetPingPong = safe(settings.pingPong, 0.0f, 1.0f);
         const float targetLowCut = filterCoefficient(settings.lowCutHz);
         const float targetHighCut = filterCoefficient(settings.highCutHz);

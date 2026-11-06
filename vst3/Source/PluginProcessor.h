@@ -39,7 +39,7 @@ private:
     std::atomic<double> hostTempo { 120.0 };
     struct DelayParameters
     {
-        std::atomic<float> *enabled = nullptr, *sync = nullptr, *eqEnabled = nullptr, *time = nullptr,
+        std::atomic<float> *enabled = nullptr, *sync = nullptr, *tapeEnabled = nullptr, *eqEnabled = nullptr, *time = nullptr,
             *feedback = nullptr, *lowCut = nullptr, *highCut = nullptr,
             *wow = nullptr, *flutter = nullptr,
             *pingPong = nullptr, *mix = nullptr, *division = nullptr, *timing = nullptr;

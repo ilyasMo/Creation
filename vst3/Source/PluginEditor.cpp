@@ -51,7 +51,8 @@ public:
         setColour(juce::PopupMenu::highlightedTextColourId,ink);
         setColour(juce::TextEditor::backgroundColourId,paper);
         setColour(juce::TextEditor::textColourId,ink);
-        setColour(juce::TextEditor::highlightColourId,orange.withAlpha(.25f));
+        setColour(juce::TextEditor::highlightColourId,juce::Colour(0xfff1c582));
+        setColour(juce::TextEditor::highlightedTextColourId,ink);
         setColour(juce::TextEditor::outlineColourId,orange);
         setColour(juce::CaretComponent::caretColourId,ink);
     }
@@ -60,11 +61,28 @@ public:
     juce::Font getTextButtonFont(juce::TextButton&,int h) override { return font(static_cast<float>(h)*.65f); }
     juce::Font getPopupMenuFont() override { return font(26); }
     int getSliderThumbRadius(juce::Slider&) override { return 28; }
+    juce::Slider::SliderLayout getSliderLayout(juce::Slider& slider) override
+    {
+        juce::Slider::SliderLayout layout;
+        layout.sliderBounds=slider.getLocalBounds();
+        if(slider.isVertical())layout.sliderBounds=layout.sliderBounds.reduced(0,32);
+        else layout.sliderBounds=layout.sliderBounds.reduced(22,0);
+        return layout;
+    }
+    juce::Font getComboBoxFont(juce::ComboBox&) override {return font(31);}
+    void drawComboBox(juce::Graphics& g,int w,int h,bool,int,int,int,int,juce::ComboBox& combo) override
+    {
+        box(g,{3,3,static_cast<float>(w-6),static_cast<float>(h-6)},true,2.8f);
+        const auto c=combo.isEnabled()?ink:ink.withAlpha(.35f);
+        line(g,static_cast<float>(w-26),h*.43f,static_cast<float>(w-19),h*.58f,2.5f,c);
+        line(g,static_cast<float>(w-19),h*.58f,static_cast<float>(w-12),h*.43f,2.5f,c);
+    }
     void drawLabel(juce::Graphics& g,juce::Label& label) override
     {
         if(!label.isBeingEdited())
         {
-            box(g,label.getLocalBounds().toFloat().reduced(3),true,2.8f);
+            if(dynamic_cast<juce::ComboBox*>(label.getParentComponent())==nullptr)
+                box(g,label.getLocalBounds().toFloat().reduced(3),true,2.8f);
             g.setColour(ink.withAlpha(label.isEnabled()?1.0f:.45f)); g.setFont(getLabelFont(label));
             g.drawFittedText(label.getText(),label.getLocalBounds().reduced(8,2),label.getJustificationType(),1);
         }
@@ -78,7 +96,7 @@ public:
         if(vertical)
         {
             const float cx=static_cast<float>(x)+static_cast<float>(width)*.5f;
-            const float top=static_cast<float>(y)+28, bottom=static_cast<float>(y+height)-28;
+            const float top=static_cast<float>(y)-28, bottom=static_cast<float>(y+height)+28;
             box(g,{cx-19,top,38,bottom-top},false,4.5f);
             line(g,cx+1,bottom-6,cx,pos,7,orange);
             box(g,{cx-65,pos-27,130,54},true,4.8f);
@@ -88,7 +106,7 @@ public:
         else
         {
             const float cy=static_cast<float>(y)+static_cast<float>(height)*.5f;
-            const float left=static_cast<float>(x)+28,right=static_cast<float>(x+width)-28;
+            const float left=static_cast<float>(x)-17,right=static_cast<float>(x+width)+17;
             box(g,{left,cy-11,right-left,22},false,3.5f);
             line(g,left+5,cy,pos,cy,5,orange);
             box(g,{pos-16,cy-29,32,58},true,3.5f);
@@ -120,6 +138,23 @@ void setupValue(juce::Label& value,const char* id)
     value.setFont(juce::Font(juce::FontOptions(40.0f)));
     value.setJustificationType(juce::Justification::centred);
     value.setColour(juce::Label::textColourId,ink);
+    value.setColour(juce::Label::textWhenEditingColourId,ink);
+    value.setColour(juce::Label::backgroundWhenEditingColourId,paper);
+    value.setColour(juce::Label::outlineWhenEditingColourId,orange);
+    value.onEditorShow=[&value]
+    {
+        if(auto* editor=value.getCurrentTextEditor())
+        {
+            editor->setColour(juce::TextEditor::textColourId,ink);
+            editor->setColour(juce::TextEditor::backgroundColourId,paper);
+            editor->setColour(juce::TextEditor::highlightColourId,juce::Colour(0xfff1c582));
+            editor->setColour(juce::TextEditor::highlightedTextColourId,ink);
+            editor->setColour(juce::TextEditor::outlineColourId,ink.withAlpha(.7f));
+            editor->setColour(juce::TextEditor::focusedOutlineColourId,orange);
+            editor->setColour(juce::CaretComponent::caretColourId,ink);
+            editor->applyColourToAllText(ink,true);
+        }
+    };
     value.setTooltip("Double-click to type a value. Enter applies; Escape cancels.");
 }
 
@@ -166,7 +201,11 @@ public:
             }
             refresh();
         };
-        value.onEditorHide=[this]{refresh();}; slider.onValueChange=[this]{refresh();};
+        // JUCE invokes onEditorHide before its Return handler notifies onTextChange.
+        // Refresh on the next message, after the typed value has been committed.
+        value.onEditorHide=[safe=juce::Component::SafePointer<InkFader>(this)]
+        {juce::MessageManager::callAsync([safe]{if(safe!=nullptr)safe->refresh();});};
+        slider.onValueChange=[this]{refresh();};
         bind(id);
     }
     void bind(const char* id)
@@ -182,7 +221,7 @@ public:
     {
         if(slider.isVertical()) {auto r=getLocalBounds();value.setBounds(r.removeFromBottom(60).reduced(2,3));r.removeFromBottom(10);slider.setBounds(r);}
         else {auto r=getLocalBounds();value.setBounds(r.removeFromRight(110).reduced(2,6));r.removeFromRight(12);slider.setBounds(r);}
-        slider.setMouseDragSensitivity(juce::jmax(80,(slider.isVertical()?slider.getHeight():slider.getWidth())-56));
+        slider.setMouseDragSensitivity(juce::jmax(80,(slider.isVertical()?slider.getHeight()-64:slider.getWidth()-44)));
     }
     void refresh()
     {
@@ -225,7 +264,8 @@ public:
                     attachments[i]->setValueAsCompleteGesture(static_cast<float>(juce::jlimit(20.0,20000.0,parsed)));
                 updateLabels();
             };
-            values[i].onEditorHide=[this]{updateLabels();};
+            values[i].onEditorHide=[safe=juce::Component::SafePointer<InkEQ>(this)]
+            {juce::MessageManager::callAsync([safe]{if(safe!=nullptr)safe->updateLabels();});};
             attachments[i]=std::make_unique<juce::ParameterAttachment>(*params[i],[this,i](float hz){frequency[i]=hz;updateLabels();resized();repaint();},nullptr);
         }
         for(auto& a:attachments)a->sendInitialUpdate();
@@ -233,21 +273,21 @@ public:
     }
     void paint(juce::Graphics& g) override
     {
-        box(g,{182,32,38,520},false,4.3f);
-        line(g,201,thumbY(0),200,thumbY(1),7,orange.withAlpha(.9f));
+        box(g,{225,4,38,568},false,4.3f);
+        line(g,244,thumbY(0),244,thumbY(1),7,orange.withAlpha(.9f));
         for(size_t i=0;i<2;++i)
         {
             const float y=displayY(i);
-            if(std::abs(y-thumbY(i))>1)line(g,201,thumbY(i),201,y,2,ink);
-            box(g,{107,y-26,187,52},true,4.3f);
+            if(std::abs(y-thumbY(i))>1)line(g,244,thumbY(i),244,y,2,ink);
+            box(g,{167,y-26,155,52},true,4.3f);
             auto* look=dynamic_cast<InkLook*>(&getLookAndFeel());
-            if(look)g.setFont(look->font(35));
-            g.setColour(ink);g.drawText(i==0?"LOW CUT":"HIGH CUT",110,juce::roundToInt(y-24),180,48,juce::Justification::centred);
+            if(look)g.setFont(look->font(31));
+            g.setColour(ink);g.drawText(i==0?"LOW CUT":"HIGH CUT",170,juce::roundToInt(y-24),148,48,juce::Justification::centred);
         }
     }
     void resized() override
     {
-        for(size_t i=0;i<2;++i)values[i].setBounds(304,juce::roundToInt(displayY(i)-27),134,55);
+        for(size_t i=0;i<2;++i)values[i].setBounds(330,juce::roundToInt(displayY(i)-27),110,55);
     }
     void mouseDown(const juce::MouseEvent& e) override
     {
@@ -260,17 +300,17 @@ public:
         if(selected<0)return;
         const float scale=e.mods.isShiftDown()?.15f:1.0f;
         const double norm=std::log(static_cast<double>(startFrequency)/20.0)/std::log(1000.0)
-                         +static_cast<double>((startY-e.position.y)*scale/520.0f);
+                         +static_cast<double>((startY-e.position.y)*scale/512.0f);
         attachments[static_cast<size_t>(selected)]->setValueAsPartOfGesture(static_cast<float>(20*std::pow(1000.0,juce::jlimit(0.0,1.0,norm))));
     }
     void mouseUp(const juce::MouseEvent&) override
     {if(selected>=0)attachments[static_cast<size_t>(selected)]->endGesture();selected=-1;}
 private:
-    float thumbY(size_t i) const {return 552.0f-520.0f*static_cast<float>(std::log(std::clamp(frequency[i],20.0f,20000.0f)/20.0f)/std::log(1000.0f));}
+    float thumbY(size_t i) const {return 544.0f-512.0f*static_cast<float>(std::log(std::clamp(frequency[i],20.0f,20000.0f)/20.0f)/std::log(1000.0f));}
     float displayY(size_t i) const
     {
         const auto a=thumbY(0),b=thumbY(1);
-        if(std::abs(a-b)<62){const float middle=juce::jlimit(56.0f,528.0f,(a+b)*.5f);return middle+(i==0?31.0f:-31.0f);}
+        if(std::abs(a-b)<62){const float middle=juce::jlimit(63.0f,513.0f,(a+b)*.5f);return middle+(i==0?31.0f:-31.0f);}
         return thumbY(i);
     }
     void updateLabels()
@@ -291,15 +331,22 @@ private:
 class HeadingSwitch final : public juce::Button
 {
 public:
-    explicit HeadingSwitch(const char* label) : Button(label) {setClickingTogglesState(true);}
-    void paintButton(juce::Graphics& g,bool over,bool) override
+    explicit HeadingSwitch(const char* label) : Button(label)
+    {setClickingTogglesState(true);setMouseCursor(juce::MouseCursor::PointingHandCursor);}
+    void setArtwork(const juce::Image& plate,juce::Rectangle<int> region)
     {
-        // Heading lettering comes from the original artwork; this is a quiet ink underline.
-        if(getToggleState()||over)line(g,12,static_cast<float>(getHeight()-35),static_cast<float>(getWidth()-12),static_cast<float>(getHeight()-37),4,orange.withAlpha(getToggleState()?1.0f:.35f));
-        if(auto* look=dynamic_cast<InkLook*>(&getLookAndFeel()))g.setFont(look->font(23));
-        g.setColour(getToggleState()?orange:ink.withAlpha(.55f));
-        g.drawText(getToggleState()?"ON":"OFF",getWidth()-45,getHeight()-24,42,24,juce::Justification::centred);
+        active=plate.getClippedImage(region);bypassed=active.createCopy();
+        juce::Image::BitmapData pixels(bypassed,juce::Image::BitmapData::readWrite);
+        for(int y=0;y<pixels.height;++y)for(int x=0;x<pixels.width;++x)
+        {
+            const auto c=pixels.getPixelColour(x,y);
+            if(c.getBrightness()<.72f)pixels.setPixelColour(x,y,c.interpolatedWith(paper,.64f));
+        }
     }
+    void paintButton(juce::Graphics& g,bool,bool) override
+    {g.drawImage(getToggleState()?active:bypassed,getLocalBounds().toFloat());}
+private:
+    juce::Image active,bypassed;
 };
 }
 
@@ -313,24 +360,32 @@ public:
     {
         setLookAndFeel(&look);
         background=juce::ImageCache::getFromMemory(BinaryData::Faceplate_png,BinaryData::Faceplate_pngSize);
-        juce::Component* controls[]{&mix,&time,&feedback,&wow,&flutter,&filters,&sync,&delay,&eq,&settings};
+        juce::Component* controls[]{&mix,&time,&feedback,&wow,&flutter,&filters,&sync,&delay,&tape,&eq,&settings,&notes,&styles};
         for(auto* c : controls)addAndMakeVisible(c);
-        sync.setComponentID("delaySync");delay.setComponentID("delayEnabled");eq.setComponentID("eqEnabled");
-        sync.setTooltip("Match delay time to Ableton's tempo. Drag Time to choose a note; click its value for dotted/triplet options.");
+        sync.setComponentID("delaySync");delay.setComponentID("delayEnabled");eq.setComponentID("eqEnabled");tape.setComponentID("tapeEnabled");
+        delay.setArtwork(background,{464,125,230,72});tape.setArtwork(background,{900,125,210,72});eq.setArtwork(background,{1310,125,150,72});
+        sync.setTooltip("Match delay time to Ableton's tempo. Choose the note and timing style in the selectors underneath.");
         delay.setTooltip("Click the DELAY heading to switch Delay on or off.");
+        tape.setTooltip("Click TAPE to bypass Wow and Flutter while keeping their amounts.");
         eq.setTooltip("Click the EQ heading to switch the whole processed signal EQ on or off.");
         delayAttachment=std::make_unique<State::ButtonAttachment>(state,"delayEnabled",delay);
         eqAttachment=std::make_unique<State::ButtonAttachment>(state,"eqEnabled",eq);
+        tapeAttachment=std::make_unique<State::ButtonAttachment>(state,"tapeEnabled",tape);
         syncAttachment=std::make_unique<State::ButtonAttachment>(state,"delaySync",sync);
         settings.setComponentID("settings");settings.setTooltip("Output gain and stereo ping-pong settings.");
         settings.onClick=[this]{drawerOpen=!drawerOpen;drawer.setVisible(drawerOpen);output.setVisible(drawerOpen);pingPong.setVisible(drawerOpen);resized();repaint();};
         addChildComponent(output);addChildComponent(pingPong);
-        addMouseListener(this,true);
+        notes.setComponentID("delayDivisionMenu");styles.setComponentID("delayTimingMenu");
+        notes.addItemList(juce::StringArray{"1/1","1/2","1/4","1/8","1/16","1/32","1/64"},1);
+        styles.addItemList(juce::StringArray{"Straight","Dotted","Triplet"},1);
+        notes.setJustificationType(juce::Justification::centredLeft);styles.setJustificationType(juce::Justification::centredLeft);
+        noteAttachment=std::make_unique<State::ComboBoxAttachment>(state,"delayDivision",notes);
+        styleAttachment=std::make_unique<State::ComboBoxAttachment>(state,"delayTiming",styles);
         sync.onClick=[this]{updateSync();};
         updateSync();startTimerHz(20);
         setSize(1664,944);
     }
-    ~SketchPanel() override {stopTimer();removeMouseListener(this);setLookAndFeel(nullptr);}
+    ~SketchPanel() override {stopTimer();setLookAndFeel(nullptr);}
     void paint(juce::Graphics& g) override
     {
         g.drawImage(background,getLocalBounds().toFloat());
@@ -349,23 +404,16 @@ public:
     }
     void resized() override
     {
-        mix.setBounds(114,218,166,633);
-        time.setBounds(418,318,166,414);
+        mix.setBounds(114,242,166,609);
+        time.setBounds(418,350,166,382);
         feedback.setBounds(353,779,409,73);
-        wow.setBounds(813,288,166,555);flutter.setBounds(978,288,166,555);
+        wow.setBounds(813,312,166,531);flutter.setBounds(978,312,166,531);
         filters.setBounds(1188,220,450,575);
         sync.setBounds(614,290,146,54);
-        delay.setBounds(464,125,230,100);eq.setBounds(1310,125,150,100);
+        delay.setBounds(464,125,230,72);tape.setBounds(900,125,210,72);eq.setBounds(1310,125,150,72);
+        notes.setBounds(604,355,166,50);styles.setBounds(604,418,166,50);
         settings.setBounds(1568,20,70,70);
         drawer.setBounds(1162,92,478,251);output.setBounds(1190,139,420,66);pingPong.setBounds(1190,239,420,66);
-    }
-    void mouseDown(const juce::MouseEvent& e) override
-    {
-        if(synced&&e.eventComponent==&time.value)
-        {
-            // A synced note is a discrete musical choice, not a numeric millisecond field.
-            time.value.hideEditor(true);showNotes();
-        }
     }
 private:
     class PaperDrawer final : public juce::Component
@@ -374,7 +422,7 @@ private:
     void updateSync()
     {
         const bool now=state.getRawParameterValue("delaySync")->load()>=.5f;
-        if(!initialised||now!=synced)
+        if((!initialised||now!=synced)&&!time.slider.isMouseButtonDown()&&!time.value.isBeingEdited())
         {
             synced=now;initialised=true;
             time.format=now?std::function<juce::String(float)>([this](float v)
@@ -385,8 +433,9 @@ private:
             }):std::function<juce::String(float)>();
             time.bind(now?"delayDivision":"delayTimeMs");
             time.value.setEditable(false,!now,false);
-            time.value.setTooltip(now?"Click to choose a note and Straight, Dotted or Triplet timing.":"Double-click to type milliseconds. Enter applies; Escape cancels.");
+            time.value.setTooltip(now?"Choose the note and timing style using the selectors under SYNC.":"Double-click to type milliseconds. Enter applies; Escape cancels.");
         }
+        notes.setEnabled(now);styles.setEnabled(now);
         time.refresh();
         if(drawer.getParentComponent()==nullptr)
         {
@@ -394,36 +443,19 @@ private:
         }
         drawer.setVisible(drawerOpen);
     }
-    void showNotes()
-    {
-        juce::PopupMenu menu,notes,styles;
-        const char* names[]{"1/1","1/2","1/4","1/8","1/16","1/32","1/64"};
-        const auto note=juce::roundToInt(state.getRawParameterValue("delayDivision")->load());
-        const auto style=juce::roundToInt(state.getRawParameterValue("delayTiming")->load());
-        for(int i=0;i<7;++i)notes.addItem(i+1,names[i],true,i==note);
-        styles.addItem(20,"Straight",true,style==0);styles.addItem(21,"Dotted",true,style==1);styles.addItem(22,"Triplet",true,style==2);
-        menu.addSubMenu("Note",notes);menu.addSubMenu("Timing",styles);
-        juce::Component::SafePointer<SketchPanel> safe(this);
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&time.value),[safe](int result)
-        {
-            if(safe==nullptr||result==0)return;
-            auto* param=safe->state.getParameter(result<20?"delayDivision":"delayTiming");
-            const float value=static_cast<float>(result<20?result-1:result-20);
-            param->beginChangeGesture();param->setValueNotifyingHost(param->convertTo0to1(value));param->endChangeGesture();
-            safe->time.refresh();
-        });
-    }
     State& state;
     InkLook look;
     juce::Image background;
     InkFader mix,time,feedback,wow,flutter;
     InkEQ filters;
     juce::ToggleButton sync{"SYNC"};
-    HeadingSwitch delay{"DELAY"},eq{"EQ"};
+    HeadingSwitch delay{"DELAY"},tape{"TAPE"},eq{"EQ"};
+    juce::ComboBox notes,styles;
     juce::TextButton settings;
     InkFader output,pingPong;
     bool synced=false,initialised=false,drawerOpen=false;
-    std::unique_ptr<State::ButtonAttachment> delayAttachment,eqAttachment,syncAttachment;
+    std::unique_ptr<State::ButtonAttachment> delayAttachment,tapeAttachment,eqAttachment,syncAttachment;
+    std::unique_ptr<State::ComboBoxAttachment> noteAttachment,styleAttachment;
 };
 
 AfterglowEditor::AfterglowEditor(AfterglowProcessor& p) : AudioProcessorEditor(p),panel(std::make_unique<SketchPanel>(p))

@@ -58,12 +58,16 @@ int main()
     const auto baseline=render(s,48000,tone);
     for(bool slow:{false,true})
     {
-        auto mod=s;if(slow)mod.wow=1;else mod.flutter=1;
+        auto mod=s;mod.tapeEnabled=true;if(slow)mod.wow=1;else mod.flutter=1;
         const auto moved=render(mod,48000,tone);double difference=0;
         for(size_t i=24000;i<tone[0].size();++i)difference+=std::pow(moved[0][i]-baseline[0][i],2);
         check(difference>1,"Wow/flutter does not modulate the echoes");
     }
-    afterglow::DelayEngine engine;s={};s.enabled=true;s.feedback=.95f;s.wow=s.flutter=1;s.eqEnabled=true;engine.prepare(48000,s);
+    auto bypassedTape=s;bypassedTape.wow=1;bypassedTape.flutter=1;bypassedTape.tapeEnabled=false;
+    check(render(bypassedTape,48000,tone)==baseline,"Tape bypass still modulates delay");
+    bypassedTape.tapeEnabled=true;
+    check(render(bypassedTape,48000,tone)!=baseline,"Tape enable does not restore modulation");
+    afterglow::DelayEngine engine;s={};s.enabled=true;s.feedback=.95f;s.wow=s.flutter=1;s.tapeEnabled=true;s.eqEnabled=true;engine.prepare(48000,s);
     for(int block=0;block<1000;++block)
     {
         auto audio=empty(128);for(int i=0;i<128;++i)audio[0][i]=audio[1][i]=.1f*std::sin(static_cast<float>(block*128+i)*.08f);

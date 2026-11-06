@@ -36,3 +36,13 @@ small ON/OFF status show its state, without the removed checkboxes. Wow/Flutter 
 the delay engine. The top-right asterisk opens Output gain and Ping-pong. Fader wheels are
 disabled to avoid accidental host scrolling changes. The native editor resizes with a fixed aspect
 ratio. No audio parameters, saved-state IDs or processing algorithms change in this visual release.
+
+
+0.4.1 fixes the Return-key text-entry refresh ordering and explicitly sets dark text and a high-contrast
+selection colour for numeric editors. Fader geometry now shares the actual slider layout, with cap travel
+inside the drawn rail; shared EQ handles sit clear of both frequency endpoint labels. Delay/Tape/EQ headings
+use their original artwork in black when enabled and grey when bypassed, without ON/OFF text. New Tape ON
+parameter gates Wow/Flutter with the existing smoothing, preserving their amounts. New instances default
+Tape OFF. Older saved states without Tape ON restore it enabled if Wow or Flutter were nonzero.
+The note and timing selectors below SYNC are enabled only while Sync is on. They retain the same existing
+parameter IDs and work with host automation; the nested readout popup is removed.

@@ -32,6 +32,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameters()
     number("eqHighCutHz", "High cut / low-pass", 20, 20000, 1, 20000, "Hz", 0.3f);
     number("delayPingPong", "Ping-pong", 0, 100, 0.1f, 0, "%");
     number("masterMix", "Master Mix", 0, 100, 0.1f, 100, "%");
+    layout.add(std::make_unique<juce::AudioParameterBool>(ID { "tapeEnabled", 1 }, "Tape ON", false));
     return layout;
 }
 }
@@ -46,6 +47,7 @@ AfterglowProcessor::AfterglowProcessor()
     auto& p = delayParameters;
     p.enabled = parameters.getRawParameterValue("delayEnabled");
     p.sync = parameters.getRawParameterValue("delaySync");
+    p.tapeEnabled = parameters.getRawParameterValue("tapeEnabled");
     p.time = parameters.getRawParameterValue("delayTimeMs");
     p.feedback = parameters.getRawParameterValue("delayFeedback");
     p.eqEnabled = parameters.getRawParameterValue("eqEnabled");
@@ -64,6 +66,7 @@ afterglow::DelaySettings AfterglowProcessor::readDelaySettings() const noexcept
     const auto& p = delayParameters;
     afterglow::DelaySettings s;
     s.enabled = p.enabled->load() >= 0.5f;
+    s.tapeEnabled = p.tapeEnabled->load() >= 0.5f;
     s.sync = p.sync->load() >= 0.5f; s.eqEnabled = p.eqEnabled->load() >= 0.5f;
     s.timeMs = p.time->load(); s.feedback = p.feedback->load() / 100.0f;
     s.lowCutHz = p.lowCut->load(); s.highCutHz = p.highCut->load();
@@ -160,6 +163,17 @@ void AfterglowProcessor::setStateInformation(const void* data, int sizeInBytes)
             {
                 const auto legacy = restored.getChildWithProperty("id", id);
                 if (legacy.isValid()) restored.removeChild(legacy, nullptr);
+            }
+            // Earlier versions applied nonzero tape movement without a separate bypass.
+            // Preserve that sound when restoring their sessions; new instances still start OFF.
+            if (!restored.getChildWithProperty("id", "tapeEnabled").isValid())
+            {
+                const auto wow = restored.getChildWithProperty("id", "delayWow");
+                const auto flutter = restored.getChildWithProperty("id", "delayFlutter");
+                const bool usedTape = (wow.isValid() && static_cast<float>(wow.getProperty("value")) > 0)
+                                  || (flutter.isValid() && static_cast<float>(flutter.getProperty("value")) > 0);
+                juce::ValueTree tape("PARAM");tape.setProperty("id", "tapeEnabled", nullptr);
+                tape.setProperty("value", usedTape ? 1.0f : 0.0f, nullptr);restored.appendChild(tape, nullptr);
             }
             // Earlier gain-only sessions have no delay parameters. Add their defaults.
             for (auto* parameter : getParameters())
