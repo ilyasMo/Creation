@@ -108,7 +108,7 @@ void AfterglowProcessor::prepareToPlay(double sampleRate, int)
     updateTempo();
     delayEngine.prepare(sampleRate, readDelaySettings());
     gainStage.prepare(sampleRate, juce::Decibels::decibelsToGain(outputGain->load()));
-    setLatencySamples(0);
+    setLatencySamples(delayEngine.latencySamples());
 }
 
 void AfterglowProcessor::applyGain(juce::AudioBuffer<float>& buffer, float gain)

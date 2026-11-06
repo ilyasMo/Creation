@@ -1,3 +1,8 @@
+# Current routing: Tape → Delay → EQ → global Mix → Output
+
+See TAPE-NOTES.md for 0.5.0 independent Wow/Flutter and fixed 6 ms compensated latency.
+The notes below record earlier implementation checkpoints.
+
 # Native delay 0.3.0
 
 Focus remains the native VST3 running in Ableton Live 11. This release replaces the Feedback Tone and

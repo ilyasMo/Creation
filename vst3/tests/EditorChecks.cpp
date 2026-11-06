@@ -43,6 +43,11 @@ int main(int argc,char** argv)
         AfterglowProcessor processor;
         std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
         editor->setVisible(true);editor->setSize(1664,944);save(*editor,dir.getChildFile("Afterglow-Initial.png"));
+        processor.prepareToPlay(48000,512);
+        require(processor.getLatencySamples()==288,"Host latency does not match Tape dry reference");
+        juce::AudioBuffer<float> bypassAudio(2,512);bypassAudio.clear();bypassAudio.setSample(0,0,1);bypassAudio.setSample(1,0,1);
+        juce::MidiBuffer midi;processor.processBlockBypassed(bypassAudio,midi);
+        require(bypassAudio.getSample(0,288)==1&&bypassAudio.getSample(0,0)==0,"Host bypass is not latency aligned");
         auto& state=processor.getParameterState();
         auto* mix=dynamic_cast<juce::Slider*>(find(*editor,"masterMix"));require(mix!=nullptr,"Missing native mix fader");
         for(const char* id:{"masterMix","delayTimeMs","delayWow","delayFlutter","delayFeedback"})

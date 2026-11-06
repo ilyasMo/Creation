@@ -366,7 +366,7 @@ public:
         delay.setArtwork(background,{464,125,230,72});tape.setArtwork(background,{900,125,210,72});eq.setArtwork(background,{1310,125,150,72});
         sync.setTooltip("Match delay time to Ableton's tempo. Choose the note and timing style in the selectors underneath.");
         delay.setTooltip("Click the DELAY heading to switch Delay on or off.");
-        tape.setTooltip("Click TAPE to bypass Wow and Flutter while keeping their amounts.");
+        tape.setTooltip("Click TAPE to process the signal with Wow/Flutter, independently of Delay.");
         eq.setTooltip("Click the EQ heading to switch the whole processed signal EQ on or off.");
         delayAttachment=std::make_unique<State::ButtonAttachment>(state,"delayEnabled",delay);
         eqAttachment=std::make_unique<State::ButtonAttachment>(state,"eqEnabled",eq);

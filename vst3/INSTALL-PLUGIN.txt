@@ -1,9 +1,11 @@
-AFTERGLOW 0.4.1 — HANDWRITTEN NATIVE DELAY
+AFTERGLOW 0.5.0 — INDEPENDENT WOW / FLUTTER
 
 1. Close Ableton before replacing the plugin.
 2. Extract Afterglow-Windows-VST3 from the successful GitHub Actions run.
 3. Replace the entire Afterglow.vst3 folder in C:\Program Files\Common Files\VST3.
 4. Open Live 11, Preferences > Plug-Ins > Rescan, then load Afterglow.
+
+LATENCY: nominal 6 ms, fixed for dry/processed/bypass. Ableton compensates playback timing.
 
 STARTUP: Delay OFF, Tape OFF, EQ OFF, Wow/Flutter 0%, Master Mix 100%, Output gain 0 dB.
 
@@ -11,7 +13,9 @@ STARTUP: Delay OFF, Tape OFF, EQ OFF, Wow/Flutter 0%, Master Mix 100%, Output ga
   Tape bypass preserves the Wow/Flutter amounts.
 - Turn Sync on, then drag TIME to choose a note. Use the selectors below Sync for the note and Straight/Dotted/Triplet style.
 - Try Feedback at 35–45%.
-- With TAPE enabled, Wow adds slow tape drift; Flutter adds faster movement. Try one at a time at 20–40%.
+- TAPE now works with DELAY OFF. Set Master Mix 100%, turn TAPE on, and try Wow 50% / Flutter 0%.
+  Then try Wow 0% / Flutter 50%. Both controls add smooth, irregular pitch movement.
+  Tape now processes the main signal before Delay and EQ. Age/saturation are not included yet.
 - EQ ON enables the Low Cut (high-pass) and High Cut (low-pass) handles on the shared rail.
   EQ shapes the complete processed delay signal, including the first echo and its core signal.
 - Master Mix 0% is the original; 100% is the complete processed signal including EQ.
@@ -22,4 +26,5 @@ STARTUP: Delay OFF, Tape OFF, EQ OFF, Wow/Flutter 0%, Master Mix 100%, Output ga
 Use a short phrase with space afterward for listening. Echoes can increase peak level; leave headroom.
 The top-right asterisk opens Output gain and Ping-pong. Drag the corner to resize the editor.
 Shift-drag faders for finer control. The remaining effect modules are not ported yet.
+Saved amounts remain, but the Tape sound has intentionally changed from echo-only modulation.
 Report sound and control behavior in chat.

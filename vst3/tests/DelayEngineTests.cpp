@@ -14,6 +14,12 @@ Audio render(afterglow::DelaySettings s,double rate,Audio input,int channels=2)
     }
     return input;
 }
+Audio aligned(const Audio& input,double rate)
+{
+    const auto delay=static_cast<size_t>(std::llround(rate*.006));auto out=empty(static_cast<int>(input[0].size()));
+    for(size_t ch=0;ch<2;++ch)for(size_t i=delay;i<input[ch].size();++i)out[ch][i]=input[ch][i-delay];
+    return out;
+}
 double energy(const std::vector<float>& v,int start,int end)
 {double e=0;for(int i=start;i<end;++i)e+=v[static_cast<size_t>(i)]*v[static_cast<size_t>(i)];return e;}
 int main()
@@ -28,10 +34,10 @@ int main()
     {
         s={};s.timeMs=40;s.feedback=0;
         auto input=empty(static_cast<int>(rate));input[0][0]=input[1][0]=1;
-        check(render(s,rate,input)==input,"All-off unity failed");
+        check(render(s,rate,input)==aligned(input,rate),"All-off unity failed");
         s.enabled=true;s.eqEnabled=true;s.lowCutHz=2000;s.highCutHz=3000;s.mix=0;
-        check(render(s,rate,input)==input,"Master zero does not bypass entire processing");
-        s.mix=1;s.eqEnabled=false;const int at=static_cast<int>(rate*.04);
+        check(render(s,rate,input)==aligned(input,rate),"Master zero does not bypass entire processing");
+        s.mix=1;s.eqEnabled=false;const int at=static_cast<int>(rate*.04)+static_cast<int>(std::llround(rate*.006));
         check(std::abs(render(s,rate,input)[0][at]-.5f)<1e-4,"Echo timing failed");
         check(std::abs(render(s,rate,input,1)[0][at]-.5f)<1e-4,"Mono failed");
     }
@@ -42,16 +48,16 @@ int main()
     s.eqEnabled=true;s.lowCutHz=2000;s.highCutHz=20000;
     auto filtered=render(s,48000,source);
     check(energy(filtered[0],0,960)<energy(unfiltered[0],0,960)*.02,"EQ does not affect processed core");
-    check(energy(filtered[0],4800,5760)<energy(unfiltered[0],4800,5760)*.02,"EQ does not affect first echo");
+    check(energy(filtered[0],5088,6048)<energy(unfiltered[0],5088,6048)*.02,"EQ does not affect first echo");
     s.enabled=false;
     check(energy(render(s,48000,source)[0],0,960)<energy(source[0],0,960)*.02,"EQ stops when delay bypassed");
-    s.enabled=true;s.mix=.5f;auto half=render(s,48000,source);
+    s.enabled=true;s.mix=.5f;auto half=render(s,48000,source);const auto dry=aligned(source,48000);
     for(size_t i=0;i<source[0].size();++i)
-        check(std::abs(half[0][i]-(source[0][i]+filtered[0][i])*.5f)<1e-6,"Master is not whole-chain dry/wet");
+        check(std::abs(half[0][i]-(dry[0][i]+filtered[0][i])*.5f)<1e-6,"Master is not whole-chain dry/wet");
     s={};s.enabled=true;s.timeMs=100;s.feedback=.75f;s.pingPong=1;
     auto pulse=empty(48000);pulse[0][0]=1;auto bounce=render(s,48000,pulse);
-    check(energy(bounce[0],4800,4900)>.01&&energy(bounce[1],4800,4900)<1e-8,"Ping-pong first side failed");
-    check(energy(bounce[1],9600,10000)>.001,"Ping-pong second side failed");
+    check(energy(bounce[0],5088,5188)>.01&&energy(bounce[1],5088,5188)<1e-8,"Ping-pong first side failed");
+    check(energy(bounce[1],9888,10288)>.001,"Ping-pong second side failed");
     auto tone=empty(96000);
     for(size_t i=0;i<tone[0].size();++i)tone[0][i]=tone[1][i]=.1f*std::sin(static_cast<float>(i)*.08f);
     s={};s.enabled=true;s.timeMs=100;s.feedback=.4f;
@@ -61,12 +67,19 @@ int main()
         auto mod=s;mod.tapeEnabled=true;if(slow)mod.wow=1;else mod.flutter=1;
         const auto moved=render(mod,48000,tone);double difference=0;
         for(size_t i=24000;i<tone[0].size();++i)difference+=std::pow(moved[0][i]-baseline[0][i],2);
-        check(difference>1,"Wow/flutter does not modulate the echoes");
+        check(difference>1,"Wow/flutter does not modulate audio");
     }
     auto bypassedTape=s;bypassedTape.wow=1;bypassedTape.flutter=1;bypassedTape.tapeEnabled=false;
     check(render(bypassedTape,48000,tone)==baseline,"Tape bypass still modulates delay");
     bypassedTape.tapeEnabled=true;
     check(render(bypassedTape,48000,tone)!=baseline,"Tape enable does not restore modulation");
+    // Tape must act on the main signal with Delay bypassed, and Master Mix must still bypass all processing.
+    s={};s.tapeEnabled=true;s.wow=.5f;s.flutter=.5f;
+    const auto tapeOnly=render(s,48000,tone);const auto dryOnly=aligned(tone,48000);
+    check(tapeOnly!=dryOnly,"Tape disappears when Delay is OFF");
+    s.mix=0;check(render(s,48000,tone)==dryOnly,"Master zero does not bypass Tape");
+    s.mix=.5f;const auto tapeHalf=render(s,48000,tone);
+    for(size_t i=0;i<tone[0].size();++i)check(std::abs(tapeHalf[0][i]-(dryOnly[0][i]+tapeOnly[0][i])*.5f)<1e-6,"Tape Master Mix is not aligned");
     afterglow::DelayEngine engine;s={};s.enabled=true;s.feedback=.95f;s.wow=s.flutter=1;s.tapeEnabled=true;s.eqEnabled=true;engine.prepare(48000,s);
     for(int block=0;block<1000;++block)
     {

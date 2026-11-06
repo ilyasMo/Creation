@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 #include "FeedbackColour.h"
+#include "TapeEngine.h"
 
 namespace afterglow
 {
@@ -32,13 +33,13 @@ class DelayEngine
 public:
     void prepare(double sampleRate, const DelaySettings& settings)
     {
-        rate = std::isfinite(sampleRate) && sampleRate > 0.0 ? sampleRate : 48000.0;
+        rate = std::isfinite(sampleRate) && sampleRate >= 8000.0 ? sampleRate : 48000.0;
         const auto size = static_cast<size_t>(std::ceil(rate * 24.02)) + 8;
         for (auto& channel : ring) channel.assign(size, 0.0f);
         write = 0;
         for (auto& filter : lowCutFilters) filter.reset();
         for (auto& filter : highCutFilters) filter.reset();
-        phases.fill(0.0);
+        tape.prepare(rate, settings.tapeEnabled, settings.wow, settings.flutter);
         delayA = delayB = requested = delaySeconds(settings) * rate;
         fadeLength = std::max(1, static_cast<int>(rate * 0.040));
         fadePosition = fadeLength;
@@ -47,12 +48,12 @@ public:
         eqActive = settings.eqEnabled ? 1.0f : 0.0f;
         feedback = safe(settings.feedback, 0.0f, 0.95f);
         mix = safe(settings.mix, 0.0f, 1.0f);
-        wow = settings.tapeEnabled ? safe(settings.wow, 0.0f, 1.0f) : 0.0f;
-        flutter = settings.tapeEnabled ? safe(settings.flutter, 0.0f, 1.0f) : 0.0f;
         pingPong = safe(settings.pingPong, 0.0f, 1.0f);
         lowCutG = filterCoefficient(settings.lowCutHz);
         highCutG = filterCoefficient(settings.highCutHz);
     }
+
+    int latencySamples() const noexcept { return tape.latencySamples(); }
 
     void process(float* const* channels, int channelCount, int samples,
                  const DelaySettings& settings) noexcept
@@ -63,18 +64,18 @@ public:
         const float targetEq = settings.eqEnabled ? 1.0f : 0.0f;
         const float targetFeedback = safe(settings.feedback, 0.0f, 0.95f);
         const float targetMix = safe(settings.mix, 0.0f, 1.0f);
-        const float targetWow = settings.tapeEnabled ? safe(settings.wow, 0.0f, 1.0f) : 0.0f;
-        const float targetFlutter = settings.tapeEnabled ? safe(settings.flutter, 0.0f, 1.0f) : 0.0f;
         const float targetPingPong = safe(settings.pingPong, 0.0f, 1.0f);
         const float targetLowCut = filterCoefficient(settings.lowCutHz);
         const float targetHighCut = filterCoefficient(settings.highCutHz);
         for (int i = 0; i < samples; ++i)
         {
             approach(active, targetActive); approach(eqActive, targetEq); approach(feedback, targetFeedback);
-            approach(mix, targetMix); approach(wow, targetWow); approach(flutter, targetFlutter);
+            approach(mix, targetMix);
             approach(pingPong, targetPingPong);
             approach(lowCutG, targetLowCut); approach(highCutG, targetHighCut);
-            const double modulation = tapeModulation();
+            const float inputLeft = channels[0][i];
+            const float inputRight = channelCount > 1 ? channels[1][i] : inputLeft;
+            const auto frame = tape.process(inputLeft,inputRight,settings.tapeEnabled,settings.wow,settings.flutter);
             if (active * mix < 1.0e-6f)
             {
                 delayA = delayB = requested;
@@ -89,13 +90,13 @@ public:
             std::array<float, 2> tap {}, loop {};
             for (size_t ch = 0; ch < 2; ++ch)
             {
-                const float first = read(ch, delayA + modulation);
+                const float first = read(ch, delayA);
                 tap[ch] = fadePosition == fadeLength ? first
-                    : first + (read(ch, delayB + modulation) - first) * blend;
+                    : first + (read(ch, delayB) - first) * blend;
                 loop[ch] = tap[ch] * feedback;
             }
-            const float left = channels[0][i];
-            const float right = channelCount > 1 ? channels[1][i] : left;
+            const float left = frame.wet[0];
+            const float right = frame.wet[1];
             const float p = channelCount > 1 ? pingPong : 0.0f;
             const float sendLeft = left * (1.0f - p) + (left + right) * 0.5f * p;
             ring[0][write] = sendLeft * active + loop[0] * (1.0f - p) + loop[1] * p;
@@ -103,8 +104,8 @@ public:
             for (int channel = 0; channel < std::min(channelCount, 2); ++channel)
             {
                 const auto ch = static_cast<size_t>(channel);
-                const float original = channel == 0 ? left : right;
-                const float processed = original + tap[ch] * 0.5f * active;
+                const float original = frame.dry[ch];
+                const float processed = frame.wet[ch] + tap[ch] * 0.5f * active;
                 const float highPassed = lowCutFilters[ch].process(processed, lowCutG, true);
                 const float filtered = highCutFilters[ch].process(highPassed, highCutG);
                 const float wholeChain = processed + (filtered - processed) * eqActive;
@@ -130,21 +131,6 @@ private:
     {
         return FeedbackFilter::conductance(rate, safe(frequency, 20, 20000));
     }
-    double tapeModulation() noexcept
-    {
-        double modulation = 0.0;
-        if (wow > 1.0e-7f)
-            modulation += wow * 0.003 * (0.85 * std::sin(phases[0]) + 0.15 * std::sin(phases[1]));
-        if (flutter > 1.0e-7f)
-            modulation += flutter * 0.0003 * (0.75 * std::sin(phases[2]) + 0.25 * std::sin(phases[3]));
-        constexpr std::array<double, 4> speeds { 0.45, 0.17, 7.5, 11.31 };
-        for (size_t i = 0; i < phases.size(); ++i)
-        {
-            phases[i] += 2.0 * pi * speeds[i] / rate;
-            if (phases[i] >= 2.0 * pi) phases[i] -= 2.0 * pi;
-        }
-        return modulation * rate;
-    }
     float read(size_t ch, double delay) const noexcept
     {
         delay = std::clamp(delay, 3.0, static_cast<double>(ring[ch].size()) - 4.0);
@@ -160,11 +146,11 @@ private:
     }
     std::array<std::vector<float>, 2> ring;
     std::array<FeedbackFilter, 2> lowCutFilters, highCutFilters;
-    std::array<double, 4> phases {};
+    TapeEngine tape;
     size_t write = 0;
     double rate = 48000.0, delayA = 15360, delayB = 15360, requested = 15360;
     float smoothing = 0.001f, lowCutG = 0.001f, highCutG = 1.0f;
-    float active = 0, eqActive = 0, feedback = 0, mix = 1, wow = 0, flutter = 0, pingPong = 0;
+    float active = 0, eqActive = 0, feedback = 0, mix = 1, pingPong = 0;
     int fadeLength = 1920, fadePosition = 1920;
 };
 }
