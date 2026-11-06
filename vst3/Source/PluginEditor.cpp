@@ -295,10 +295,10 @@ public:
     void paintButton(juce::Graphics& g,bool over,bool) override
     {
         // Heading lettering comes from the original artwork; this is a quiet ink underline.
-        if(getToggleState()||over)line(g,12,static_cast<float>(getHeight()-7),static_cast<float>(getWidth()-12),static_cast<float>(getHeight()-9),4,orange.withAlpha(getToggleState()?1.0f:.35f));
+        if(getToggleState()||over)line(g,12,static_cast<float>(getHeight()-35),static_cast<float>(getWidth()-12),static_cast<float>(getHeight()-37),4,orange.withAlpha(getToggleState()?1.0f:.35f));
         if(auto* look=dynamic_cast<InkLook*>(&getLookAndFeel()))g.setFont(look->font(23));
         g.setColour(getToggleState()?orange:ink.withAlpha(.55f));
-        g.drawText(getToggleState()?"ON":"OFF",getWidth()-45,getHeight()-2,42,24,juce::Justification::centred);
+        g.drawText(getToggleState()?"ON":"OFF",getWidth()-45,getHeight()-24,42,24,juce::Justification::centred);
     }
 };
 }
@@ -355,7 +355,7 @@ public:
         wow.setBounds(813,288,166,555);flutter.setBounds(978,288,166,555);
         filters.setBounds(1188,220,450,575);
         sync.setBounds(614,290,146,54);
-        delay.setBounds(464,125,230,72);eq.setBounds(1310,125,150,72);
+        delay.setBounds(464,125,230,100);eq.setBounds(1310,125,150,100);
         settings.setBounds(1568,20,70,70);
         drawer.setBounds(1162,92,478,251);output.setBounds(1190,139,420,66);pingPong.setBounds(1190,239,420,66);
     }

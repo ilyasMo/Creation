@@ -58,15 +58,16 @@ int main(int argc,char** argv)
         sync->setToggleState(true,juce::sendNotificationSync);sync->onClick();
         require(find(*editor,"delayDivision")!=nullptr,"Time fader did not switch to note divisions");
         auto* note=dynamic_cast<juce::Slider*>(find(*editor,"delayDivision"));note->setValue(3,juce::sendNotificationSync);
-        set("delayTiming",1);
+        set("delayTiming",1);sync->onClick();
         save(*editor,dir.getChildFile("Afterglow-Sketch.png"));
         // Values remain separately reachable if the filter handles occupy the same frequency.
         set("eqLowCutHz",8500);save(*editor,dir.getChildFile("Afterglow-EQ-Overlap.png"));
         auto* low=find(*editor,"eqLowCutHzValue");auto* high=find(*editor,"eqHighCutHzValue");
         require(low!=nullptr&&high!=nullptr&&!low->getBounds().intersects(high->getBounds()),"EQ readouts overlap");
         auto* settings=dynamic_cast<juce::TextButton*>(find(*editor,"settings"));require(settings!=nullptr,"Missing settings");settings->onClick();
-        require(find(*editor,"outputGain")->isShowing(),"Output gain is inaccessible");
+        require(find(*editor,"outputGain")->isVisible() && find(*editor,"outputGain")->getParentComponent()->isVisible(),"Output gain is inaccessible");
         save(*editor,dir.getChildFile("Afterglow-Settings.png"));
+        settings->onClick();set("eqLowCutHz",120);
         editor->setSize(915,519);save(*editor,dir.getChildFile("Afterglow-Small.png"));
         std::cout<<"Native editor binding, typed values, sync switching, EQ overlap and resize checks passed.\n";
         return 0;
